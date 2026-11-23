@@ -1,0 +1,964 @@
+x6 ( 2026-11-22T22:26:07+00:00 ) {
+
+	r0000	/*
+	r0001	 * configure_3.cpp
+	r0002	 *
+	r0003	 * Risk-free C++ generative fabric for cppdb. This replaces the C configurator
+	r0004	 * with explicit object specs, bounded execution, dry-run planning, escaped
+	r0005	 * source records, and config/direct/menu input paths.
+	r0006	 *
+	r0007	 * Build:
+	r0008	 *   c++ -std=c++17 -Wall -Wextra -pedantic -O2 configure_3.cpp -o configure_3
+	r0009	 *
+	r0010	 * Examples:
+	r0011	 *   ./configure_3 --sample-config x33.fabric
+	r0012	 *   ./configure_3 --config x33.fabric
+	r0013	 *   ./configure_3 --config x33.fabric --execute --overwrite
+	r0014	 *   ./configure_3 --execute --object-name x33 --input-value 01 --input-width 3
+	r0015	 */
+	r0016	
+	r0017	#include <algorithm>
+	r0018	#include <cctype>
+	r0019	#include <cstdio>
+	r0020	#include <cstdint>
+	r0021	#include <fstream>
+	r0022	#include <iomanip>
+	r0023	#include <iostream>
+	r0024	#include <limits>
+	r0025	#include <map>
+	r0026	#include <sstream>
+	r0027	#include <stdexcept>
+	r0028	#include <string>
+	r0029	#include <string_view>
+	r0030	#include <vector>
+	r0031	
+	r0032	namespace {
+	r0033	
+	r0034	constexpr std::uint64_t kDefaultLimit = 10000;
+	r0035	constexpr std::uint64_t kUnapprovedRecordLimit = 100000;
+	r0036	constexpr std::uint64_t kMaxCartesianWidth = 64;
+	r0037	constexpr std::uint64_t kMaxRepeatCount = 1000000;
+	r0038	constexpr std::size_t kMaxTextLength = 4096;
+	r0039	
+	r0040	enum class Flow {
+	r0041	    cartesian,
+	r0042	    literal,
+	r0043	    repeat,
+	r0044	    reverse
+	r0045	};
+	r0046	
+	r0047	struct ObjectSpec {
+	r0048	    bool touched = false;
+	r0049	    std::string object_name = "x33";
+	r0050	    std::string input_name = "x1";
+	r0051	    std::string input_value = "0123456789";
+	r0052	    std::uint64_t input_width = 7;
+	r0053	    std::string flow_name = "x15";
+	r0054	    Flow flow = Flow::cartesian;
+	r0055	    std::string output_name = "x31";
+	r0056	    std::string output_target = "x33.cppdb.txt";
+	r0057	    std::string separator = "\n";
+	r0058	    std::string prefix;
+	r0059	    std::string suffix;
+	r0060	};
+	r0061	
+	r0062	struct Options {
+	r0063	    bool execute = false;
+	r0064	    bool allow_large = false;
+	r0065	    bool all = false;
+	r0066	    bool overwrite = false;
+	r0067	    bool menu = false;
+	r0068	    std::uint64_t start = 0;
+	r0069	    std::uint64_t limit = kDefaultLimit;
+	r0070	    std::string config_path;
+	r0071	    std::string sample_config_path;
+	r0072	};
+	r0073	
+	r0074	struct Program {
+	r0075	    Options options;
+	r0076	    ObjectSpec direct_spec;
+	r0077	    bool has_direct_spec = false;
+	r0078	};
+	r0079	
+	r0080	class OutputSink {
+	r0081	public:
+	r0082	    virtual ~OutputSink() = default;
+	r0083	    virtual void write(std::string_view value) = 0;
+	r0084	};
+	r0085	
+	r0086	class StreamSink final : public OutputSink {
+	r0087	public:
+	r0088	    explicit StreamSink(std::ostream& stream) : stream_(stream) {}
+	r0089	
+	r0090	    void write(std::string_view value) override {
+	r0091	        stream_.write(value.data(), static_cast<std::streamsize>(value.size()));
+	r0092	        if (!stream_) {
+	r0093	            throw std::runtime_error("Failed while writing to stream.");
+	r0094	        }
+	r0095	    }
+	r0096	
+	r0097	private:
+	r0098	    std::ostream& stream_;
+	r0099	};
+	r0100	
+	r0101	class FileSink final : public OutputSink {
+	r0102	public:
+	r0103	    FileSink(const std::string& path, const char* mode) : file_(std::fopen(path.c_str(), mode)) {
+	r0104	        if (file_ == nullptr) {
+	r0105	            throw std::runtime_error("Unable to open output file: " + path);
+	r0106	        }
+	r0107	    }
+	r0108	
+	r0109	    ~FileSink() override {
+	r0110	        if (file_ != nullptr) {
+	r0111	            std::fclose(file_);
+	r0112	        }
+	r0113	    }
+	r0114	
+	r0115	    FileSink(const FileSink&) = delete;
+	r0116	    FileSink& operator=(const FileSink&) = delete;
+	r0117	
+	r0118	    void write(std::string_view value) override {
+	r0119	        if (!value.empty() &&
+	r0120	            std::fwrite(value.data(), 1, value.size(), file_) != value.size()) {
+	r0121	            throw std::runtime_error("Failed while writing output file.");
+	r0122	        }
+	r0123	    }
+	r0124	
+	r0125	private:
+	r0126	    std::FILE* file_;
+	r0127	};
+	r0128	
+	r0129	class InputFile {
+	r0130	public:
+	r0131	    explicit InputFile(const std::string& path) : file_(std::fopen(path.c_str(), "rb")) {
+	r0132	        if (file_ == nullptr) {
+	r0133	            throw std::runtime_error("Unable to open config file: " + path);
+	r0134	        }
+	r0135	    }
+	r0136	
+	r0137	    ~InputFile() {
+	r0138	        if (file_ != nullptr) {
+	r0139	            std::fclose(file_);
+	r0140	        }
+	r0141	    }
+	r0142	
+	r0143	    InputFile(const InputFile&) = delete;
+	r0144	    InputFile& operator=(const InputFile&) = delete;
+	r0145	
+	r0146	    bool read_line(std::string& line) {
+	r0147	        char buffer[8192];
+	r0148	        line.clear();
+	r0149	
+	r0150	        for (;;) {
+	r0151	            if (std::fgets(buffer, sizeof(buffer), file_) == nullptr) {
+	r0152	                if (std::ferror(file_) != 0) {
+	r0153	                    throw std::runtime_error("Failed while reading config file.");
+	r0154	                }
+	r0155	                return !line.empty();
+	r0156	            }
+	r0157	
+	r0158	            line += buffer;
+	r0159	            if (!line.empty() && line.back() == '\n') {
+	r0160	                break;
+	r0161	            }
+	r0162	
+	r0163	            const std::size_t chunk_size = std::char_traits<char>::length(buffer);
+	r0164	            if (chunk_size + 1 < sizeof(buffer)) {
+	r0165	                break;
+	r0166	            }
+	r0167	        }
+	r0168	
+	r0169	        while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
+	r0170	            line.pop_back();
+	r0171	        }
+	r0172	
+	r0173	        return true;
+	r0174	    }
+	r0175	
+	r0176	private:
+	r0177	    std::FILE* file_;
+	r0178	};
+	r0179	
+	r0180	class Writer {
+	r0181	public:
+	r0182	    explicit Writer(OutputSink& sink) : sink_(sink) {}
+	r0183	
+	r0184	    Writer& operator<<(char value) {
+	r0185	        sink_.write(std::string_view(&value, 1));
+	r0186	        return *this;
+	r0187	    }
+	r0188	
+	r0189	    Writer& operator<<(std::string_view value) {
+	r0190	        sink_.write(value);
+	r0191	        return *this;
+	r0192	    }
+	r0193	
+	r0194	    Writer& operator<<(const std::string& value) {
+	r0195	        sink_.write(value);
+	r0196	        return *this;
+	r0197	    }
+	r0198	
+	r0199	    Writer& operator<<(const char* value) {
+	r0200	        sink_.write(value == nullptr ? std::string_view{} : std::string_view(value));
+	r0201	        return *this;
+	r0202	    }
+	r0203	
+	r0204	    template <typename T>
+	r0205	    Writer& operator<<(const T& value) {
+	r0206	        std::ostringstream out;
+	r0207	        out << value;
+	r0208	        sink_.write(out.str());
+	r0209	        return *this;
+	r0210	    }
+	r0211	
+	r0212	private:
+	r0213	    OutputSink& sink_;
+	r0214	};
+	r0215	
+	r0216	std::string to_lower(std::string value) {
+	r0217	    for (char& c : value) {
+	r0218	        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	r0219	    }
+	r0220	    return value;
+	r0221	}
+	r0222	
+	r0223	std::string trim(std::string value) {
+	r0224	    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
+	r0225	        value.erase(value.begin());
+	r0226	    }
+	r0227	    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
+	r0228	        value.pop_back();
+	r0229	    }
+	r0230	    return value;
+	r0231	}
+	r0232	
+	r0233	bool equals_ignore_case(std::string_view lhs, std::string_view rhs) {
+	r0234	    if (lhs.size() != rhs.size()) {
+	r0235	        return false;
+	r0236	    }
+	r0237	
+	r0238	    for (std::size_t i = 0; i < lhs.size(); ++i) {
+	r0239	        if (std::tolower(static_cast<unsigned char>(lhs[i])) !=
+	r0240	            std::tolower(static_cast<unsigned char>(rhs[i]))) {
+	r0241	            return false;
+	r0242	        }
+	r0243	    }
+	r0244	
+	r0245	    return true;
+	r0246	}
+	r0247	
+	r0248	bool parse_u64(std::string_view text, std::uint64_t& out) {
+	r0249	    if (text.empty()) {
+	r0250	        return false;
+	r0251	    }
+	r0252	
+	r0253	    std::uint64_t value = 0;
+	r0254	    for (char c : text) {
+	r0255	        if (!std::isdigit(static_cast<unsigned char>(c))) {
+	r0256	            return false;
+	r0257	        }
+	r0258	        const std::uint64_t digit = static_cast<std::uint64_t>(c - '0');
+	r0259	        if (value > (std::numeric_limits<std::uint64_t>::max() - digit) / 10) {
+	r0260	            return false;
+	r0261	        }
+	r0262	        value = value * 10 + digit;
+	r0263	    }
+	r0264	
+	r0265	    out = value;
+	r0266	    return true;
+	r0267	}
+	r0268	
+	r0269	std::uint64_t require_u64(const std::vector<std::string>& args, std::size_t& i) {
+	r0270	    if (i + 1 >= args.size()) {
+	r0271	        throw std::runtime_error("Missing value for " + args[i]);
+	r0272	    }
+	r0273	
+	r0274	    std::uint64_t value = 0;
+	r0275	    if (!parse_u64(args[++i], value)) {
+	r0276	        throw std::runtime_error("Invalid unsigned integer for " + args[i - 1] + ": " + args[i]);
+	r0277	    }
+	r0278	    return value;
+	r0279	}
+	r0280	
+	r0281	std::string require_string(const std::vector<std::string>& args, std::size_t& i) {
+	r0282	    if (i + 1 >= args.size()) {
+	r0283	        throw std::runtime_error("Missing value for " + args[i]);
+	r0284	    }
+	r0285	    return args[++i];
+	r0286	}
+	r0287	
+	r0288	bool safe_power(std::uint64_t base, std::uint64_t exp, std::uint64_t& out) {
+	r0289	    if (base == 0) {
+	r0290	        return false;
+	r0291	    }
+	r0292	
+	r0293	    std::uint64_t value = 1;
+	r0294	    for (std::uint64_t i = 0; i < exp; ++i) {
+	r0295	        if (value > std::numeric_limits<std::uint64_t>::max() / base) {
+	r0296	            return false;
+	r0297	        }
+	r0298	        value *= base;
+	r0299	    }
+	r0300	
+	r0301	    out = value;
+	r0302	    return true;
+	r0303	}
+	r0304	
+	r0305	std::string unescape_text(std::string_view value) {
+	r0306	    std::string out;
+	r0307	    out.reserve(value.size());
+	r0308	
+	r0309	    for (std::size_t i = 0; i < value.size(); ++i) {
+	r0310	        char c = value[i];
+	r0311	        if (c != '\\' || i + 1 >= value.size()) {
+	r0312	            out.push_back(c);
+	r0313	            continue;
+	r0314	        }
+	r0315	
+	r0316	        const char next = value[++i];
+	r0317	        if (next == 'n') {
+	r0318	            out.push_back('\n');
+	r0319	        } else if (next == 't') {
+	r0320	            out.push_back('\t');
+	r0321	        } else if (next == 'r') {
+	r0322	            out.push_back('\r');
+	r0323	        } else if (next == '\\') {
+	r0324	            out.push_back('\\');
+	r0325	        } else {
+	r0326	            out.push_back(next);
+	r0327	        }
+	r0328	    }
+	r0329	
+	r0330	    return out;
+	r0331	}
+	r0332	
+	r0333	std::string escape_field(std::string_view value) {
+	r0334	    std::ostringstream out;
+	r0335	    out << std::hex << std::uppercase << std::setfill('0');
+	r0336	
+	r0337	    for (unsigned char c : value) {
+	r0338	        if (c == '\\') {
+	r0339	            out << "\\\\";
+	r0340	        } else if (c == '\n') {
+	r0341	            out << "\\n";
+	r0342	        } else if (c == '\r') {
+	r0343	            out << "\\r";
+	r0344	        } else if (c == '\t') {
+	r0345	            out << "\\t";
+	r0346	        } else if (c < 32 || c == 127) {
+	r0347	            out << "\\x" << std::setw(2) << static_cast<unsigned int>(c);
+	r0348	        } else {
+	r0349	            out << static_cast<char>(c);
+	r0350	        }
+	r0351	    }
+	r0352	
+	r0353	    return out.str();
+	r0354	}
+	r0355	
+	r0356	std::uint64_t fnv1a_64(std::string_view value) {
+	r0357	    std::uint64_t hash = 14695981039346656037ull;
+	r0358	    for (unsigned char c : value) {
+	r0359	        hash ^= static_cast<std::uint64_t>(c);
+	r0360	        hash *= 1099511628211ull;
+	r0361	    }
+	r0362	    return hash;
+	r0363	}
+	r0364	
+	r0365	std::string hex64(std::uint64_t value) {
+	r0366	    std::ostringstream out;
+	r0367	    out << std::hex << std::nouppercase << std::setfill('0') << std::setw(16) << value;
+	r0368	    return out.str();
+	r0369	}
+	r0370	
+	r0371	std::string flow_name(Flow flow) {
+	r0372	    if (flow == Flow::cartesian) {
+	r0373	        return "cartesian";
+	r0374	    }
+	r0375	    if (flow == Flow::literal) {
+	r0376	        return "literal";
+	r0377	    }
+	r0378	    if (flow == Flow::repeat) {
+	r0379	        return "repeat";
+	r0380	    }
+	r0381	    return "reverse";
+	r0382	}
+	r0383	
+	r0384	Flow parse_flow(std::string_view value) {
+	r0385	    const std::string normalized = to_lower(std::string(value));
+	r0386	    if (normalized == "cartesian" || normalized == "product" || normalized == "combinations") {
+	r0387	        return Flow::cartesian;
+	r0388	    }
+	r0389	    if (normalized == "literal" || normalized == "echo") {
+	r0390	        return Flow::literal;
+	r0391	    }
+	r0392	    if (normalized == "repeat") {
+	r0393	        return Flow::repeat;
+	r0394	    }
+	r0395	    if (normalized == "reverse") {
+	r0396	        return Flow::reverse;
+	r0397	    }
+	r0398	    throw std::runtime_error("Unknown flow_type: " + std::string(value));
+	r0399	}
+	r0400	
+	r0401	std::string make_cartesian_value(std::uint64_t ordinal,
+	r0402	                                 std::uint64_t width,
+	r0403	                                 std::string_view alphabet) {
+	r0404	    std::string value(static_cast<std::size_t>(width), '\0');
+	r0405	    const std::uint64_t base = static_cast<std::uint64_t>(alphabet.size());
+	r0406	
+	r0407	    for (std::uint64_t pos = 0; pos < width; ++pos) {
+	r0408	        const std::uint64_t reversed_index = width - 1 - pos;
+	r0409	        const std::uint64_t alphabet_index = ordinal % base;
+	r0410	        value[static_cast<std::size_t>(reversed_index)] = alphabet[static_cast<std::size_t>(alphabet_index)];
+	r0411	        ordinal /= base;
+	r0412	    }
+	r0413	
+	r0414	    return value;
+	r0415	}
+	r0416	
+	r0417	std::string make_payload(const ObjectSpec& spec, std::uint64_t ordinal) {
+	r0418	    if (spec.flow == Flow::cartesian) {
+	r0419	        return make_cartesian_value(ordinal, spec.input_width, spec.input_value);
+	r0420	    }
+	r0421	    if (spec.flow == Flow::literal) {
+	r0422	        return spec.input_value;
+	r0423	    }
+	r0424	    if (spec.flow == Flow::repeat) {
+	r0425	        return spec.input_value;
+	r0426	    }
+	r0427	
+	r0428	    std::string reversed = spec.input_value;
+	r0429	    std::reverse(reversed.begin(), reversed.end());
+	r0430	    return reversed;
+	r0431	}
+	r0432	
+	r0433	std::uint64_t expected_total(const ObjectSpec& spec) {
+	r0434	    if (spec.flow == Flow::cartesian) {
+	r0435	        std::uint64_t total = 0;
+	r0436	        if (!safe_power(static_cast<std::uint64_t>(spec.input_value.size()),
+	r0437	                        spec.input_width,
+	r0438	                        total)) {
+	r0439	            throw std::runtime_error("Combination count overflowed uint64_t for " +
+	r0440	                                     spec.object_name);
+	r0441	        }
+	r0442	        return total;
+	r0443	    }
+	r0444	
+	r0445	    if (spec.flow == Flow::repeat) {
+	r0446	        return spec.input_width;
+	r0447	    }
+	r0448	
+	r0449	    return 1;
+	r0450	}
+	r0451	
+	r0452	std::uint64_t requested_count(const Options& options, std::uint64_t total) {
+	r0453	    if (options.start >= total) {
+	r0454	        return 0;
+	r0455	    }
+	r0456	
+	r0457	    const std::uint64_t remaining = total - options.start;
+	r0458	    return options.all || options.limit > remaining ? remaining : options.limit;
+	r0459	}
+	r0460	
+	r0461	bool file_exists(const std::string& path) {
+	r0462	    std::FILE* file = std::fopen(path.c_str(), "rb");
+	r0463	    if (file == nullptr) {
+	r0464	        return false;
+	r0465	    }
+	r0466	    std::fclose(file);
+	r0467	    return true;
+	r0468	}
+	r0469	
+	r0470	void validate_text_length(const std::string& label, const std::string& value) {
+	r0471	    if (value.size() > kMaxTextLength) {
+	r0472	        throw std::runtime_error(label + " is too large; maximum length is 4096 bytes.");
+	r0473	    }
+	r0474	}
+	r0475	
+	r0476	void validate_spec(const ObjectSpec& spec) {
+	r0477	    if (spec.object_name.empty() || spec.input_name.empty() || spec.flow_name.empty() ||
+	r0478	        spec.output_name.empty() || spec.output_target.empty()) {
+	r0479	        throw std::runtime_error("Object spec has an empty required name or output target.");
+	r0480	    }
+	r0481	
+	r0482	    validate_text_length("input_value", spec.input_value);
+	r0483	    validate_text_length("prefix", spec.prefix);
+	r0484	    validate_text_length("suffix", spec.suffix);
+	r0485	    validate_text_length("separator", spec.separator);
+	r0486	
+	r0487	    if (spec.input_width == 0) {
+	r0488	        throw std::runtime_error("input_width must be greater than zero for " + spec.object_name);
+	r0489	    }
+	r0490	
+	r0491	    if (spec.flow == Flow::cartesian) {
+	r0492	        if (spec.input_value.empty()) {
+	r0493	            throw std::runtime_error("cartesian input_value cannot be empty for " + spec.object_name);
+	r0494	        }
+	r0495	        if (spec.input_width > kMaxCartesianWidth) {
+	r0496	            throw std::runtime_error("cartesian input_width exceeds 64 for " + spec.object_name);
+	r0497	        }
+	r0498	        (void)expected_total(spec);
+	r0499	    }
+	r0500	
+	r0501	    if (spec.flow == Flow::repeat && spec.input_width > kMaxRepeatCount) {
+	r0502	        throw std::runtime_error("repeat input_width exceeds 1000000 for " + spec.object_name);
+	r0503	    }
+	r0504	}
+	r0505	
+	r0506	void validate_safety(const Options& options,
+	r0507	                     const ObjectSpec& spec,
+	r0508	                     std::uint64_t count) {
+	r0509	    if (!options.allow_large && count > kUnapprovedRecordLimit) {
+	r0510	        throw std::runtime_error("Refusing to emit more than 100000 records for " +
+	r0511	                                 spec.object_name + " without --allow-large.");
+	r0512	    }
+	r0513	}
+	r0514	
+	r0515	void set_spec_value(ObjectSpec& spec, std::string key, std::string value) {
+	r0516	    key = to_lower(trim(key));
+	r0517	    value = trim(value);
+	r0518	    spec.touched = true;
+	r0519	
+	r0520	    if (key == "object" || key == "object_name" || key == "name") {
+	r0521	        spec.object_name = value;
+	r0522	    } else if (key == "input_name") {
+	r0523	        spec.input_name = value;
+	r0524	    } else if (key == "input" || key == "input_value" || key == "alphabet") {
+	r0525	        spec.input_value = unescape_text(value);
+	r0526	    } else if (key == "input_width" || key == "width" || key == "length" || key == "depth") {
+	r0527	        if (!parse_u64(value, spec.input_width)) {
+	r0528	            throw std::runtime_error("Invalid input_width: " + value);
+	r0529	        }
+	r0530	    } else if (key == "flow_name") {
+	r0531	        spec.flow_name = value;
+	r0532	    } else if (key == "flow" || key == "flow_type" || key == "processing_flow") {
+	r0533	        spec.flow = parse_flow(value);
+	r0534	    } else if (key == "output_name") {
+	r0535	        spec.output_name = value;
+	r0536	    } else if (key == "output" || key == "output_target" || key == "file") {
+	r0537	        spec.output_target = value;
+	r0538	    } else if (key == "separator" || key == "sep") {
+	r0539	        spec.separator = unescape_text(value);
+	r0540	    } else if (key == "prefix") {
+	r0541	        spec.prefix = unescape_text(value);
+	r0542	    } else if (key == "suffix") {
+	r0543	        spec.suffix = unescape_text(value);
+	r0544	    } else {
+	r0545	        throw std::runtime_error("Unknown config key: " + key);
+	r0546	    }
+	r0547	}
+	r0548	
+	r0549	bool parse_config_line(std::string line, std::string& key, std::string& value) {
+	r0550	    const std::size_t comment = line.find('#');
+	r0551	    if (comment != std::string::npos) {
+	r0552	        line.erase(comment);
+	r0553	    }
+	r0554	
+	r0555	    line = trim(line);
+	r0556	    if (line.empty()) {
+	r0557	        return false;
+	r0558	    }
+	r0559	
+	r0560	    const std::size_t equals = line.find('=');
+	r0561	    if (equals != std::string::npos) {
+	r0562	        key = trim(line.substr(0, equals));
+	r0563	        value = trim(line.substr(equals + 1));
+	r0564	        return !key.empty();
+	r0565	    }
+	r0566	
+	r0567	    std::istringstream in(line);
+	r0568	    in >> key;
+	r0569	    std::getline(in, value);
+	r0570	    value = trim(value);
+	r0571	    return !key.empty();
+	r0572	}
+	r0573	
+	r0574	std::vector<ObjectSpec> load_config(const std::string& path) {
+	r0575	    InputFile in(path);
+	r0576	    std::vector<ObjectSpec> specs;
+	r0577	    ObjectSpec current;
+	r0578	    std::string line;
+	r0579	    std::uint64_t line_number = 0;
+	r0580	
+	r0581	    while (in.read_line(line)) {
+	r0582	        ++line_number;
+	r0583	
+	r0584	        std::string key;
+	r0585	        std::string value;
+	r0586	        if (!parse_config_line(line, key, value)) {
+	r0587	            continue;
+	r0588	        }
+	r0589	
+	r0590	        if (equals_ignore_case(key, "end")) {
+	r0591	            if (current.touched) {
+	r0592	                validate_spec(current);
+	r0593	                specs.push_back(current);
+	r0594	                current = ObjectSpec{};
+	r0595	            }
+	r0596	            continue;
+	r0597	        }
+	r0598	
+	r0599	        if ((equals_ignore_case(key, "object") || equals_ignore_case(key, "object_name")) &&
+	r0600	            current.touched) {
+	r0601	            validate_spec(current);
+	r0602	            specs.push_back(current);
+	r0603	            current = ObjectSpec{};
+	r0604	        }
+	r0605	
+	r0606	        try {
+	r0607	            set_spec_value(current, key, value);
+	r0608	        } catch (const std::exception& ex) {
+	r0609	            std::ostringstream message;
+	r0610	            message << "Config line " << line_number << ": " << ex.what();
+	r0611	            throw std::runtime_error(message.str());
+	r0612	        }
+	r0613	    }
+	r0614	
+	r0615	    if (current.touched) {
+	r0616	        validate_spec(current);
+	r0617	        specs.push_back(current);
+	r0618	    }
+	r0619	
+	r0620	    if (specs.empty()) {
+	r0621	        throw std::runtime_error("Config file contains no object specs: " + path);
+	r0622	    }
+	r0623	
+	r0624	    return specs;
+	r0625	}
+	r0626	
+	r0627	void write_sample_config(const std::string& path, bool overwrite) {
+	r0628	    if (!overwrite && file_exists(path)) {
+	r0629	        throw std::runtime_error("Sample config already exists. Use --overwrite to replace it: " + path);
+	r0630	    }
+	r0631	
+	r0632	    FileSink sink(path, "wb");
+	r0633	    Writer out(sink);
+	r0634	    out
+	r0635	        << "# cppdb configure_3 fabric config\n"
+	r0636	        << "object_name=x33\n"
+	r0637	        << "input_name=x1\n"
+	r0638	        << "input_value=0123456789\n"
+	r0639	        << "input_width=3\n"
+	r0640	        << "flow_name=x15\n"
+	r0641	        << "flow_type=cartesian\n"
+	r0642	        << "output_name=x31\n"
+	r0643	        << "output_target=x33.cppdb.txt\n"
+	r0644	        << "separator=\\n\n"
+	r0645	        << "prefix=\n"
+	r0646	        << "suffix=\n"
+	r0647	        << "end\n"
+	r0648	        << "\n"
+	r0649	        << "object_name=asset_alias_seed\n"
+	r0650	        << "input_name=alias_text\n"
+	r0651	        << "input_value=PlayerController\n"
+	r0652	        << "input_width=1\n"
+	r0653	        << "flow_name=reverse_alias_demo\n"
+	r0654	        << "flow_type=reverse\n"
+	r0655	        << "output_name=stdout_preview\n"
+	r0656	        << "output_target=stdout\n"
+	r0657	        << "separator=\\n\n"
+	r0658	        << "end\n";
+	r0659	}
+	r0660	
+	r0661	std::string prompt_string(const std::string& label, const std::string& default_value) {
+	r0662	    std::cout << label << " [" << escape_field(default_value) << "]: ";
+	r0663	    std::string value;
+	r0664	    std::getline(std::cin, value);
+	r0665	    return value.empty() ? default_value : value;
+	r0666	}
+	r0667	
+	r0668	std::uint64_t prompt_u64(const std::string& label, std::uint64_t default_value) {
+	r0669	    for (;;) {
+	r0670	        std::cout << label << " [" << default_value << "]: ";
+	r0671	        std::string value;
+	r0672	        std::getline(std::cin, value);
+	r0673	        if (value.empty()) {
+	r0674	            return default_value;
+	r0675	        }
+	r0676	
+	r0677	        std::uint64_t parsed = 0;
+	r0678	        if (parse_u64(value, parsed)) {
+	r0679	            return parsed;
+	r0680	        }
+	r0681	
+	r0682	        std::cout << "Please enter a non-negative integer.\n";
+	r0683	    }
+	r0684	}
+	r0685	
+	r0686	ObjectSpec prompt_spec() {
+	r0687	    ObjectSpec spec;
+	r0688	    spec.object_name = prompt_string("object_name", spec.object_name);
+	r0689	    spec.input_name = prompt_string("input_name", spec.input_name);
+	r0690	    spec.input_value = unescape_text(prompt_string("input_value", spec.input_value));
+	r0691	    spec.input_width = prompt_u64("input_width", spec.input_width);
+	r0692	    spec.flow_name = prompt_string("flow_name", spec.flow_name);
+	r0693	    spec.flow = parse_flow(prompt_string("flow_type cartesian|literal|repeat|reverse", "cartesian"));
+	r0694	    spec.output_name = prompt_string("output_name", spec.output_name);
+	r0695	    spec.output_target = prompt_string("output_target file|stdout|-", spec.output_target);
+	r0696	    spec.separator = unescape_text(prompt_string("separator", "\\n"));
+	r0697	    spec.prefix = unescape_text(prompt_string("prefix", ""));
+	r0698	    spec.suffix = unescape_text(prompt_string("suffix", ""));
+	r0699	    spec.touched = true;
+	r0700	    validate_spec(spec);
+	r0701	    return spec;
+	r0702	}
+	r0703	
+	r0704	void print_help(const char* executable) {
+	r0705	    std::cout
+	r0706	        << "Usage:\n"
+	r0707	        << "  " << executable << " --menu\n"
+	r0708	        << "  " << executable << " --config <path> [--execute]\n"
+	r0709	        << "  " << executable << " --sample-config <path>\n"
+	r0710	        << "  " << executable << " [object flags] [--execute]\n\n"
+	r0711	        << "Object flags:\n"
+	r0712	        << "  --object-name <name>       runtime object name\n"
+	r0713	        << "  --input-name <name>        runtime input name\n"
+	r0714	        << "  --input-value <value>      payload/alphabet, supports \\\\n, \\\\t, \\\\r\n"
+	r0715	        << "  --input-width <n>          width/count/depth\n"
+	r0716	        << "  --flow-name <name>         runtime processing-flow name\n"
+	r0717	        << "  --flow-type <type>         cartesian|literal|repeat|reverse\n"
+	r0718	        << "  --output-name <name>       runtime output name\n"
+	r0719	        << "  --output-target <target>   file path, stdout, or -\n"
+	r0720	        << "  --separator <text>         stored as metadata, supports escapes\n"
+	r0721	        << "  --prefix <text>            prepended to rendered value\n"
+	r0722	        << "  --suffix <text>            appended to rendered value\n\n"
+	r0723	        << "Execution controls:\n"
+	r0724	        << "  --start <n>                first ordinal, default 0\n"
+	r0725	        << "  --limit <n>                maximum records, default 10000\n"
+	r0726	        << "  --all                      emit all records after --start\n"
+	r0727	        << "  --allow-large              allow more than 100000 records\n"
+	r0728	        << "  --overwrite                allow replacing output files\n"
+	r0729	        << "  --execute                  actually write output\n\n"
+	r0730	        << "Aliases:\n"
+	r0731	        << "  -n <name>  -i <value>  -w <n>  -f <type>  -o <target>\n";
+	r0732	}
+	r0733	
+	r0734	Program parse_program(int argc, char** argv) {
+	r0735	    Program program;
+	r0736	    std::vector<std::string> args(argv, argv + argc);
+	r0737	
+	r0738	    for (std::size_t i = 1; i < args.size(); ++i) {
+	r0739	        const std::string& arg = args[i];
+	r0740	
+	r0741	        if (arg == "--help" || arg == "-h") {
+	r0742	            print_help(argv[0]);
+	r0743	            std::exit(0);
+	r0744	        } else if (arg == "--execute") {
+	r0745	            program.options.execute = true;
+	r0746	        } else if (arg == "--allow-large") {
+	r0747	            program.options.allow_large = true;
+	r0748	        } else if (arg == "--all") {
+	r0749	            program.options.all = true;
+	r0750	        } else if (arg == "--overwrite") {
+	r0751	            program.options.overwrite = true;
+	r0752	        } else if (arg == "--menu" || arg == "--ui") {
+	r0753	            program.options.menu = true;
+	r0754	        } else if (arg == "--start") {
+	r0755	            program.options.start = require_u64(args, i);
+	r0756	        } else if (arg == "--limit") {
+	r0757	            program.options.limit = require_u64(args, i);
+	r0758	        } else if (arg == "--config") {
+	r0759	            program.options.config_path = require_string(args, i);
+	r0760	        } else if (arg == "--sample-config") {
+	r0761	            program.options.sample_config_path = require_string(args, i);
+	r0762	        } else if (arg == "--object-name" || arg == "-n") {
+	r0763	            set_spec_value(program.direct_spec, "object_name", require_string(args, i));
+	r0764	            program.has_direct_spec = true;
+	r0765	        } else if (arg == "--input-name") {
+	r0766	            set_spec_value(program.direct_spec, "input_name", require_string(args, i));
+	r0767	            program.has_direct_spec = true;
+	r0768	        } else if (arg == "--input-value" || arg == "-i") {
+	r0769	            set_spec_value(program.direct_spec, "input_value", require_string(args, i));
+	r0770	            program.has_direct_spec = true;
+	r0771	        } else if (arg == "--input-width" || arg == "-w") {
+	r0772	            set_spec_value(program.direct_spec, "input_width", require_string(args, i));
+	r0773	            program.has_direct_spec = true;
+	r0774	        } else if (arg == "--flow-name") {
+	r0775	            set_spec_value(program.direct_spec, "flow_name", require_string(args, i));
+	r0776	            program.has_direct_spec = true;
+	r0777	        } else if (arg == "--flow-type" || arg == "-f") {
+	r0778	            set_spec_value(program.direct_spec, "flow_type", require_string(args, i));
+	r0779	            program.has_direct_spec = true;
+	r0780	        } else if (arg == "--output-name") {
+	r0781	            set_spec_value(program.direct_spec, "output_name", require_string(args, i));
+	r0782	            program.has_direct_spec = true;
+	r0783	        } else if (arg == "--output-target" || arg == "-o") {
+	r0784	            set_spec_value(program.direct_spec, "output_target", require_string(args, i));
+	r0785	            program.has_direct_spec = true;
+	r0786	        } else if (arg == "--separator") {
+	r0787	            set_spec_value(program.direct_spec, "separator", require_string(args, i));
+	r0788	            program.has_direct_spec = true;
+	r0789	        } else if (arg == "--prefix") {
+	r0790	            set_spec_value(program.direct_spec, "prefix", require_string(args, i));
+	r0791	            program.has_direct_spec = true;
+	r0792	        } else if (arg == "--suffix") {
+	r0793	            set_spec_value(program.direct_spec, "suffix", require_string(args, i));
+	r0794	            program.has_direct_spec = true;
+	r0795	        } else {
+	r0796	            throw std::runtime_error("Unknown option: " + arg);
+	r0797	        }
+	r0798	    }
+	r0799	
+	r0800	    return program;
+	r0801	}
+	r0802	
+	r0803	void write_spec_output(Writer& out,
+	r0804	                       const Options& options,
+	r0805	                       const ObjectSpec& spec,
+	r0806	                       std::uint64_t total,
+	r0807	                       std::uint64_t count) {
+	r0808	    out << "# cppdb-configure-source v1\n";
+	r0809	    out << "# source_kind=configure_3\n";
+	r0810	    out << "# role=configured_object_fabric\n";
+	r0811	    out << "# record_mode=escaped_line\n";
+	r0812	    out << "# object_name=" << escape_field(spec.object_name) << '\n';
+	r0813	    out << "# input_name=" << escape_field(spec.input_name) << '\n';
+	r0814	    out << "# input_width=" << spec.input_width << '\n';
+	r0815	    out << "# input_size=" << spec.input_value.size() << '\n';
+	r0816	    out << "# flow_name=" << escape_field(spec.flow_name) << '\n';
+	r0817	    out << "# flow_type=" << flow_name(spec.flow) << '\n';
+	r0818	    out << "# output_name=" << escape_field(spec.output_name) << '\n';
+	r0819	    out << "# separator=" << escape_field(spec.separator) << '\n';
+	r0820	    out << "# prefix=" << escape_field(spec.prefix) << '\n';
+	r0821	    out << "# suffix=" << escape_field(spec.suffix) << '\n';
+	r0822	    out << "# expected_total=" << total << '\n';
+	r0823	    out << "# start=" << options.start << '\n';
+	r0824	    out << "# emitted_records=" << count << '\n';
+	r0825	    out << "# truncated=" << (options.start + count < total ? "true" : "false") << '\n';
+	r0826	
+	r0827	    for (std::uint64_t i = 0; i < count; ++i) {
+	r0828	        const std::uint64_t ordinal = options.start + i;
+	r0829	        const std::string payload = make_payload(spec, ordinal);
+	r0830	        const std::string rendered = spec.prefix + payload + spec.suffix;
+	r0831	
+	r0832	        out << "record\t"
+	r0833	            << ordinal << '\t'
+	r0834	            << escape_field(spec.object_name) << '\t'
+	r0835	            << escape_field(spec.input_name) << '\t'
+	r0836	            << escape_field(spec.flow_name) << '\t'
+	r0837	            << escape_field(spec.output_name) << '\t'
+	r0838	            << flow_name(spec.flow) << '\t'
+	r0839	            << payload.size() << '\t'
+	r0840	            << hex64(fnv1a_64(rendered)) << '\t'
+	r0841	            << escape_field(payload) << '\t'
+	r0842	            << escape_field(rendered) << '\n';
+	r0843	    }
+	r0844	}
+	r0845	
+	r0846	void print_spec_plan(const Options& options,
+	r0847	                     const ObjectSpec& spec,
+	r0848	                     std::uint64_t total,
+	r0849	                     std::uint64_t count) {
+	r0850	    std::cout
+	r0851	        << "configure_3 dry run\n"
+	r0852	        << "  object: " << spec.object_name << '\n'
+	r0853	        << "  output: " << spec.output_target << '\n'
+	r0854	        << "  flow: " << flow_name(spec.flow) << '\n'
+	r0855	        << "  input width: " << spec.input_width << '\n'
+	r0856	        << "  expected total: " << total << '\n'
+	r0857	        << "  start: " << options.start << '\n'
+	r0858	        << "  records selected: " << count << '\n'
+	r0859	        << "  execute: false\n\n";
+	r0860	}
+	r0861	
+	r0862	void emit_specs(const Options& options, const std::vector<ObjectSpec>& specs) {
+	r0863	    std::map<std::string, bool> initialized_targets;
+	r0864	
+	r0865	    for (const ObjectSpec& spec : specs) {
+	r0866	        validate_spec(spec);
+	r0867	        const std::uint64_t total = expected_total(spec);
+	r0868	        const std::uint64_t count = requested_count(options, total);
+	r0869	        validate_safety(options, spec, count);
+	r0870	
+	r0871	        if (!options.execute) {
+	r0872	            print_spec_plan(options, spec, total, count);
+	r0873	            continue;
+	r0874	        }
+	r0875	
+	r0876	        if (spec.output_target == "-" || equals_ignore_case(spec.output_target, "stdout")) {
+	r0877	            StreamSink sink(std::cout);
+	r0878	            Writer writer(sink);
+	r0879	            write_spec_output(writer, options, spec, total, count);
+	r0880	            continue;
+	r0881	        }
+	r0882	
+	r0883	        const bool already_initialized = initialized_targets[spec.output_target];
+	r0884	        if (!already_initialized && !options.overwrite && file_exists(spec.output_target)) {
+	r0885	            throw std::runtime_error("Output file already exists. Use --overwrite to replace it: " +
+	r0886	                                     spec.output_target);
+	r0887	        }
+	r0888	
+	r0889	        FileSink sink(spec.output_target, already_initialized ? "ab" : "wb");
+	r0890	        Writer writer(sink);
+	r0891	        write_spec_output(writer, options, spec, total, count);
+	r0892	        initialized_targets[spec.output_target] = true;
+	r0893	        std::cout << "Wrote " << count << " configure_3 records for "
+	r0894	                  << spec.object_name << " to " << spec.output_target << '\n';
+	r0895	    }
+	r0896	
+	r0897	    if (!options.execute) {
+	r0898	        std::cout << "Add --execute to write the escaped cppdb source-record output.\n";
+	r0899	    }
+	r0900	}
+	r0901	
+	r0902	std::vector<ObjectSpec> resolve_specs(const Program& program, const char* executable) {
+	r0903	    if (!program.options.sample_config_path.empty()) {
+	r0904	        return {};
+	r0905	    }
+	r0906	
+	r0907	    const bool uses_config = !program.options.config_path.empty();
+	r0908	    const bool uses_direct = program.has_direct_spec;
+	r0909	
+	r0910	    if ((uses_config ? 1 : 0) + (program.options.menu ? 1 : 0) + (uses_direct ? 1 : 0) > 1) {
+	r0911	        throw std::runtime_error("Use only one input mode: --config, --menu, or direct object flags.");
+	r0912	    }
+	r0913	
+	r0914	    if (uses_config) {
+	r0915	        return load_config(program.options.config_path);
+	r0916	    }
+	r0917	
+	r0918	    if (program.options.menu) {
+	r0919	        return {prompt_spec()};
+	r0920	    }
+	r0921	
+	r0922	    if (uses_direct) {
+	r0923	        validate_spec(program.direct_spec);
+	r0924	        return {program.direct_spec};
+	r0925	    }
+	r0926	
+	r0927	    print_help(executable);
+	r0928	    return {};
+	r0929	}
+	r0930	
+	r0931	int run(int argc, char** argv) {
+	r0932	    Program program = parse_program(argc, argv);
+	r0933	
+	r0934	    if (!program.options.sample_config_path.empty()) {
+	r0935	        write_sample_config(program.options.sample_config_path, program.options.overwrite);
+	r0936	        std::cout << "Wrote sample config to " << program.options.sample_config_path << '\n';
+	r0937	        return 0;
+	r0938	    }
+	r0939	
+	r0940	    const std::vector<ObjectSpec> specs = resolve_specs(program, argv[0]);
+	r0941	    if (specs.empty()) {
+	r0942	        return 0;
+	r0943	    }
+	r0944	
+	r0945	    emit_specs(program.options, specs);
+	r0946	    return 0;
+	r0947	}
+	r0948	
+	r0949	} // namespace
+	r0950	
+	r0951	int main(int argc, char** argv) {
+	r0952	    try {
+	r0953	        return run(argc, argv);
+	r0954	    } catch (const std::exception& ex) {
+	r0955	        std::cerr << "configure_3 error: " << ex.what() << '\n';
+	r0956	        return 1;
+	r0957	    }
+	r0958	}
+	r0959	
+
+}

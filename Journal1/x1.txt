@@ -1,0 +1,124 @@
+x1 ( 2026-11-22T22:24:40+00:00 ) {
+
+	r0000	/**
+	r0001	 * @file main.c
+	r0002	 * @brief Permutation Generator in C, architected to safety-critical standards.
+	r0003	 *
+	r0004	 * @author Dominic Alexander Cooper (Original Algorithm)
+	r0005	 * @author Gemini (Architectural Refactoring)
+	r0006	 *
+	r0007	 * @details
+	r0008	 * This program generates all possible character combinations for a given length,
+	r0009	 * based on a predefined character set. It is a complete rewrite of the original
+	r0010	 * concept to align with principles of safety-critical software design.
+	r0011	 */
+	r0012	#include <stdio.h>
+	r0013	#include <stdint.h> // For fixed-width integer types like uint64_t
+	r0014	#include <stdbool.h> // For bool type
+	r0015	#include <limits.h> // For UINT64_MAX
+	r0016	//==============================================================================
+	r0017	// 1. CONFIGURATION AND DATA DEFINITIONS
+	r0018	//==============================================================================
+	r0019	#define MAX_PERMUTATION_LENGTH 10
+	r0020	static const char ALPHABET[] = {
+	r0021	    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+	r0022	    'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+	r0023	    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+	r0024	    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+	r0025	    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ' ', '\n'
+	r0026	};
+	r0027	static const uint64_t ALPHABET_SIZE = sizeof(ALPHABET) / sizeof(ALPHABET[0]);
+	r0028	//==============================================================================
+	r0029	// 2. ABSTRACT INTERFACE FOR OUTPUT (OutputSink)
+	r0030	//==============================================================================
+	r0031	typedef struct {
+	r0032	    void* context;
+	r0033	    bool (*write)(void* context, const char* buffer, uint64_t size);
+	r0034	    bool (*write_char)(void* context, char c);
+	r0035	} OutputSink;
+	r0036	//==============================================================================
+	r0037	// 3. CORE LOGIC (Generator)
+	r0038	//==============================================================================
+	r0039	static bool safe_uint64_power(uint64_t base, uint64_t exp, uint64_t* result) {
+	r0040	    *result = 1;
+	r0041	    for (uint64_t i = 0; i < exp; ++i) {
+	r0042	        if (*result > UINT64_MAX / base) {
+	r0043	            return false;
+	r0044	        }
+	r0045	        *result *= base;
+	r0046	    }
+	r0047	    return true;
+	r0048	}
+	r0049	static bool generate_permutations(uint64_t length, OutputSink* sink) {
+	r0050	    uint64_t num_combinations;
+	r0051	    if (!safe_uint64_power(ALPHABET_SIZE, length, &num_combinations)) {
+	r0052	        return false;
+	r0053	    }
+	r0054	    char current_perm[MAX_PERMUTATION_LENGTH];
+	r0055	    for (uint64_t i = 0; i < num_combinations; ++i) {
+	r0056	        uint64_t temp_row = i;
+	r0057	        for (int64_t j = length - 1; j >= 0; --j) {
+	r0058	            uint64_t char_index = temp_row % ALPHABET_SIZE;
+	r0059	            current_perm[j] = ALPHABET[char_index];
+	r0060	            temp_row /= ALPHABET_SIZE;
+	r0061	        }
+	r0062	        if (!sink->write(sink->context, current_perm, length)) {
+	r0063	            return false;
+	r0064	        }
+	r0065	        if (!sink->write_char(sink->context, '\n')) {
+	r0066	            return false;
+	r0067	        }
+	r0068	    }
+	r0069	    return true;
+	r0070	}
+	r0071	//==============================================================================
+	r0072	// 4. CONCRETE IMPLEMENTATION OF OUTPUTSINK (FileSink)
+	r0073	//==============================================================================
+	r0074	static bool file_sink_write(void* context, const char* buffer, uint64_t size) {
+	r0075	    FILE* p = (FILE*)context;
+	r0076	    return fwrite(buffer, sizeof(char), size, p) == size;
+	r0077	}
+	r0078	static bool file_sink_write_char(void* context, char c) {
+	r0079	    FILE* p = (FILE*)context;
+	r0080	    return fputc(c, p) != EOF;
+	r0081	}
+	r0082	static bool file_sink_init(OutputSink* sink, const char* filename) {
+	r0083	    FILE* p = fopen(filename, "w");
+	r0084	    if (p == NULL) {
+	r0085	        return false;
+	r0086	    }
+	r0087	    *sink = (OutputSink){
+	r0088	        .context = p,
+	r0089	        .write = file_sink_write,
+	r0090	        .write_char = file_sink_write_char
+	r0091	    };
+	r0092	    return true;
+	r0093	}
+	r0094	static void file_sink_close(OutputSink* sink) {
+	r0095	    if (sink && sink->context) {
+	r0096	        fclose((FILE*)sink->context);
+	r0097	        sink->context = NULL;
+	r0098	    }
+	r0099	}
+	r0100	//==============================================================================
+	r0101	// 5. SYSTEM ASSEMBLER (main)
+	r0102	//==============================================================================
+	r0103	int main(void) {
+	r0104	    const uint64_t permutation_length = 4;
+	r0105	    if (permutation_length == 0 || permutation_length > MAX_PERMUTATION_LENGTH) {
+	r0106	        return 1;
+	r0107	    }
+	r0108	    OutputSink file_sink;
+	r0109	    if (!file_sink_init(&file_sink, "system_safe.txt")) {
+	r0110	        perror("Error opening file");
+	r0111	        return 1;
+	r0112	    }
+	r0113	    bool success = generate_permutations(permutation_length, &file_sink);
+	r0114	    file_sink_close(&file_sink);
+	r0115	    if (!success) {
+	r0116	        return 1;
+	r0117	    }
+	r0118	    return 0;
+	r0119	}
+
+}

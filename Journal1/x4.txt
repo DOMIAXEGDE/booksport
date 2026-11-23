@@ -1,0 +1,463 @@
+x4 ( 2026-11-22T22:25:31+00:00 ) {
+
+	r0000	/*
+	r0001	 * configure_1.cpp
+	r0002	 *
+	r0003	 * Risk-free C++ replacement for the original broad-character permutation
+	r0004	 * generator. It emits a stable cppdb source-record format that can represent
+	r0005	 * embedded whitespace and newlines without corrupting database ingestion.
+	r0006	 *
+	r0007	 * Build:
+	r0008	 *   c++ -std=c++17 -Wall -Wextra -pedantic -O2 configure_1.cpp -o configure_1
+	r0009	 *
+	r0010	 * Examples:
+	r0011	 *   ./configure_1 --help
+	r0012	 *   ./configure_1 --execute --limit 1000 --output system_safe.cppdb.txt
+	r0013	 *   ./configure_1 --execute --alphabet safe --width 3 --all --allow-large
+	r0014	 */
+	r0015	
+	r0016	#include <cctype>
+	r0017	#include <cstdio>
+	r0018	#include <cstdint>
+	r0019	#include <fstream>
+	r0020	#include <iomanip>
+	r0021	#include <iostream>
+	r0022	#include <limits>
+	r0023	#include <sstream>
+	r0024	#include <stdexcept>
+	r0025	#include <string>
+	r0026	#include <string_view>
+	r0027	#include <vector>
+	r0028	
+	r0029	namespace {
+	r0030	
+	r0031	constexpr std::uint64_t kDefaultWidth = 4;
+	r0032	constexpr std::uint64_t kDefaultLimit = 10000;
+	r0033	constexpr std::uint64_t kUnapprovedRecordLimit = 100000;
+	r0034	constexpr std::uint64_t kMaxWidth = 16;
+	r0035	
+	r0036	struct Options {
+	r0037	    std::uint64_t width = kDefaultWidth;
+	r0038	    std::uint64_t start = 0;
+	r0039	    std::uint64_t limit = kDefaultLimit;
+	r0040	    bool all = false;
+	r0041	    bool allow_large = false;
+	r0042	    bool execute = false;
+	r0043	    bool overwrite = false;
+	r0044	    std::string alphabet_name = "original";
+	r0045	    std::string output_path = "system_safe.cppdb.txt";
+	r0046	};
+	r0047	
+	r0048	class OutputSink {
+	r0049	public:
+	r0050	    virtual ~OutputSink() = default;
+	r0051	    virtual void write(std::string_view value) = 0;
+	r0052	};
+	r0053	
+	r0054	class StreamSink final : public OutputSink {
+	r0055	public:
+	r0056	    explicit StreamSink(std::ostream& stream) : stream_(stream) {}
+	r0057	
+	r0058	    void write(std::string_view value) override {
+	r0059	        stream_.write(value.data(), static_cast<std::streamsize>(value.size()));
+	r0060	        if (!stream_) {
+	r0061	            throw std::runtime_error("Failed while writing to stream.");
+	r0062	        }
+	r0063	    }
+	r0064	
+	r0065	private:
+	r0066	    std::ostream& stream_;
+	r0067	};
+	r0068	
+	r0069	class FileSink final : public OutputSink {
+	r0070	public:
+	r0071	    explicit FileSink(const std::string& path) : file_(std::fopen(path.c_str(), "wb")) {
+	r0072	        if (file_ == nullptr) {
+	r0073	            throw std::runtime_error("Unable to open output file: " + path);
+	r0074	        }
+	r0075	    }
+	r0076	
+	r0077	    ~FileSink() override {
+	r0078	        if (file_ != nullptr) {
+	r0079	            std::fclose(file_);
+	r0080	        }
+	r0081	    }
+	r0082	
+	r0083	    FileSink(const FileSink&) = delete;
+	r0084	    FileSink& operator=(const FileSink&) = delete;
+	r0085	
+	r0086	    void write(std::string_view value) override {
+	r0087	        if (!value.empty() &&
+	r0088	            std::fwrite(value.data(), 1, value.size(), file_) != value.size()) {
+	r0089	            throw std::runtime_error("Failed while writing output file.");
+	r0090	        }
+	r0091	    }
+	r0092	
+	r0093	private:
+	r0094	    std::FILE* file_;
+	r0095	};
+	r0096	
+	r0097	class Writer {
+	r0098	public:
+	r0099	    explicit Writer(OutputSink& sink) : sink_(sink) {}
+	r0100	
+	r0101	    Writer& operator<<(char value) {
+	r0102	        sink_.write(std::string_view(&value, 1));
+	r0103	        return *this;
+	r0104	    }
+	r0105	
+	r0106	    Writer& operator<<(std::string_view value) {
+	r0107	        sink_.write(value);
+	r0108	        return *this;
+	r0109	    }
+	r0110	
+	r0111	    Writer& operator<<(const std::string& value) {
+	r0112	        sink_.write(value);
+	r0113	        return *this;
+	r0114	    }
+	r0115	
+	r0116	    Writer& operator<<(const char* value) {
+	r0117	        sink_.write(value == nullptr ? std::string_view{} : std::string_view(value));
+	r0118	        return *this;
+	r0119	    }
+	r0120	
+	r0121	    template <typename T>
+	r0122	    Writer& operator<<(const T& value) {
+	r0123	        std::ostringstream out;
+	r0124	        out << value;
+	r0125	        sink_.write(out.str());
+	r0126	        return *this;
+	r0127	    }
+	r0128	
+	r0129	private:
+	r0130	    OutputSink& sink_;
+	r0131	};
+	r0132	
+	r0133	std::string to_lower(std::string value) {
+	r0134	    for (char& c : value) {
+	r0135	        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	r0136	    }
+	r0137	    return value;
+	r0138	}
+	r0139	
+	r0140	bool parse_u64(std::string_view text, std::uint64_t& out) {
+	r0141	    if (text.empty()) {
+	r0142	        return false;
+	r0143	    }
+	r0144	
+	r0145	    std::uint64_t value = 0;
+	r0146	    for (char c : text) {
+	r0147	        if (!std::isdigit(static_cast<unsigned char>(c))) {
+	r0148	            return false;
+	r0149	        }
+	r0150	        const std::uint64_t digit = static_cast<std::uint64_t>(c - '0');
+	r0151	        if (value > (std::numeric_limits<std::uint64_t>::max() - digit) / 10) {
+	r0152	            return false;
+	r0153	        }
+	r0154	        value = value * 10 + digit;
+	r0155	    }
+	r0156	
+	r0157	    out = value;
+	r0158	    return true;
+	r0159	}
+	r0160	
+	r0161	std::uint64_t require_u64(const std::vector<std::string>& args, std::size_t& i) {
+	r0162	    if (i + 1 >= args.size()) {
+	r0163	        throw std::runtime_error("Missing value for " + args[i]);
+	r0164	    }
+	r0165	
+	r0166	    std::uint64_t value = 0;
+	r0167	    if (!parse_u64(args[++i], value)) {
+	r0168	        throw std::runtime_error("Invalid unsigned integer for " + args[i - 1] + ": " + args[i]);
+	r0169	    }
+	r0170	    return value;
+	r0171	}
+	r0172	
+	r0173	std::string require_string(const std::vector<std::string>& args, std::size_t& i) {
+	r0174	    if (i + 1 >= args.size()) {
+	r0175	        throw std::runtime_error("Missing value for " + args[i]);
+	r0176	    }
+	r0177	    return args[++i];
+	r0178	}
+	r0179	
+	r0180	bool safe_power(std::uint64_t base, std::uint64_t exp, std::uint64_t& out) {
+	r0181	    if (base == 0) {
+	r0182	        return false;
+	r0183	    }
+	r0184	
+	r0185	    std::uint64_t value = 1;
+	r0186	    for (std::uint64_t i = 0; i < exp; ++i) {
+	r0187	        if (value > std::numeric_limits<std::uint64_t>::max() / base) {
+	r0188	            return false;
+	r0189	        }
+	r0190	        value *= base;
+	r0191	    }
+	r0192	
+	r0193	    out = value;
+	r0194	    return true;
+	r0195	}
+	r0196	
+	r0197	std::string original_alphabet() {
+	r0198	    std::string alphabet;
+	r0199	    for (char c = 'a'; c <= 'z'; ++c) {
+	r0200	        alphabet.push_back(c);
+	r0201	    }
+	r0202	    for (char c = 'A'; c <= 'Z'; ++c) {
+	r0203	        alphabet.push_back(c);
+	r0204	    }
+	r0205	    for (char c = '0'; c <= '9'; ++c) {
+	r0206	        alphabet.push_back(c);
+	r0207	    }
+	r0208	    alphabet.push_back(' ');
+	r0209	    alphabet.push_back('\n');
+	r0210	    return alphabet;
+	r0211	}
+	r0212	
+	r0213	std::string alphabet_for_name(const std::string& name) {
+	r0214	    const std::string normalized = to_lower(name);
+	r0215	    if (normalized == "original") {
+	r0216	        return original_alphabet();
+	r0217	    }
+	r0218	    if (normalized == "safe") {
+	r0219	        return "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
+	r0220	    }
+	r0221	    if (normalized == "digits") {
+	r0222	        return "0123456789";
+	r0223	    }
+	r0224	    if (normalized == "lower") {
+	r0225	        return "abcdefghijklmnopqrstuvwxyz";
+	r0226	    }
+	r0227	    throw std::runtime_error("Unknown alphabet: " + name);
+	r0228	}
+	r0229	
+	r0230	std::string escape_field(std::string_view value) {
+	r0231	    std::ostringstream out;
+	r0232	    out << std::hex << std::uppercase << std::setfill('0');
+	r0233	
+	r0234	    for (unsigned char c : value) {
+	r0235	        if (c == '\\') {
+	r0236	            out << "\\\\";
+	r0237	        } else if (c == '\n') {
+	r0238	            out << "\\n";
+	r0239	        } else if (c == '\r') {
+	r0240	            out << "\\r";
+	r0241	        } else if (c == '\t') {
+	r0242	            out << "\\t";
+	r0243	        } else if (c < 32 || c == 127) {
+	r0244	            out << "\\x" << std::setw(2) << static_cast<unsigned int>(c);
+	r0245	        } else {
+	r0246	            out << static_cast<char>(c);
+	r0247	        }
+	r0248	    }
+	r0249	
+	r0250	    return out.str();
+	r0251	}
+	r0252	
+	r0253	std::uint64_t fnv1a_64(std::string_view value) {
+	r0254	    std::uint64_t hash = 14695981039346656037ull;
+	r0255	    for (unsigned char c : value) {
+	r0256	        hash ^= static_cast<std::uint64_t>(c);
+	r0257	        hash *= 1099511628211ull;
+	r0258	    }
+	r0259	    return hash;
+	r0260	}
+	r0261	
+	r0262	std::string hex64(std::uint64_t value) {
+	r0263	    std::ostringstream out;
+	r0264	    out << std::hex << std::nouppercase << std::setfill('0') << std::setw(16) << value;
+	r0265	    return out.str();
+	r0266	}
+	r0267	
+	r0268	std::string make_record_value(std::uint64_t ordinal, std::uint64_t width, std::string_view alphabet) {
+	r0269	    std::string value(static_cast<std::size_t>(width), '\0');
+	r0270	    const std::uint64_t base = static_cast<std::uint64_t>(alphabet.size());
+	r0271	
+	r0272	    for (std::uint64_t pos = 0; pos < width; ++pos) {
+	r0273	        const std::uint64_t reversed_index = width - 1 - pos;
+	r0274	        const std::uint64_t alphabet_index = ordinal % base;
+	r0275	        value[static_cast<std::size_t>(reversed_index)] = alphabet[static_cast<std::size_t>(alphabet_index)];
+	r0276	        ordinal /= base;
+	r0277	    }
+	r0278	
+	r0279	    return value;
+	r0280	}
+	r0281	
+	r0282	bool file_exists(const std::string& path) {
+	r0283	    std::FILE* file = std::fopen(path.c_str(), "rb");
+	r0284	    if (file == nullptr) {
+	r0285	        return false;
+	r0286	    }
+	r0287	    std::fclose(file);
+	r0288	    return true;
+	r0289	}
+	r0290	
+	r0291	void print_help(const char* executable) {
+	r0292	    std::cout
+	r0293	        << "Usage:\n"
+	r0294	        << "  " << executable << " --execute [options]\n"
+	r0295	        << "  " << executable << " [options]              # dry-run plan only\n\n"
+	r0296	        << "Options:\n"
+	r0297	        << "  --width <n>           record width, default 4, maximum 16\n"
+	r0298	        << "  --alphabet <name>     original|safe|digits|lower, default original\n"
+	r0299	        << "  --start <n>           first ordinal to emit, default 0\n"
+	r0300	        << "  --limit <n>           maximum records to emit, default 10000\n"
+	r0301	        << "  --all                 emit all records after --start\n"
+	r0302	        << "  --allow-large         allow more than 100000 records\n"
+	r0303	        << "  --output <path|- >    output file, or - for stdout\n"
+	r0304	        << "  --overwrite           allow replacing an existing output file\n"
+	r0305	        << "  --execute             actually write output\n"
+	r0306	        << "  --help                show this help\n\n"
+	r0307	        << "Output format:\n"
+	r0308	        << "  comment metadata lines beginning with '#'\n"
+	r0309	        << "  record<TAB>ordinal<TAB>role<TAB>width<TAB>fnv1a64<TAB>escaped_value\n";
+	r0310	}
+	r0311	
+	r0312	Options parse_options(int argc, char** argv) {
+	r0313	    Options options;
+	r0314	    std::vector<std::string> args(argv, argv + argc);
+	r0315	
+	r0316	    for (std::size_t i = 1; i < args.size(); ++i) {
+	r0317	        const std::string& arg = args[i];
+	r0318	        if (arg == "--help" || arg == "-h") {
+	r0319	            print_help(argv[0]);
+	r0320	            std::exit(0);
+	r0321	        } else if (arg == "--width" || arg == "-w") {
+	r0322	            options.width = require_u64(args, i);
+	r0323	        } else if (arg == "--alphabet" || arg == "-a") {
+	r0324	            options.alphabet_name = require_string(args, i);
+	r0325	        } else if (arg == "--start") {
+	r0326	            options.start = require_u64(args, i);
+	r0327	        } else if (arg == "--limit") {
+	r0328	            options.limit = require_u64(args, i);
+	r0329	        } else if (arg == "--all") {
+	r0330	            options.all = true;
+	r0331	        } else if (arg == "--allow-large") {
+	r0332	            options.allow_large = true;
+	r0333	        } else if (arg == "--output" || arg == "-o") {
+	r0334	            options.output_path = require_string(args, i);
+	r0335	        } else if (arg == "--overwrite") {
+	r0336	            options.overwrite = true;
+	r0337	        } else if (arg == "--execute") {
+	r0338	            options.execute = true;
+	r0339	        } else {
+	r0340	            throw std::runtime_error("Unknown option: " + arg);
+	r0341	        }
+	r0342	    }
+	r0343	
+	r0344	    if (options.width == 0 || options.width > kMaxWidth) {
+	r0345	        throw std::runtime_error("Width must be between 1 and 16.");
+	r0346	    }
+	r0347	
+	r0348	    return options;
+	r0349	}
+	r0350	
+	r0351	std::uint64_t requested_count(const Options& options, std::uint64_t total) {
+	r0352	    if (options.start >= total) {
+	r0353	        return 0;
+	r0354	    }
+	r0355	
+	r0356	    const std::uint64_t remaining = total - options.start;
+	r0357	    return options.all || options.limit > remaining ? remaining : options.limit;
+	r0358	}
+	r0359	
+	r0360	void validate_safety(const Options& options, std::uint64_t count) {
+	r0361	    if (!options.allow_large && count > kUnapprovedRecordLimit) {
+	r0362	        throw std::runtime_error(
+	r0363	            "Refusing to emit more than 100000 records without --allow-large.");
+	r0364	    }
+	r0365	}
+	r0366	
+	r0367	void write_output(Writer& out,
+	r0368	                  const Options& options,
+	r0369	                  const std::string& alphabet,
+	r0370	                  std::uint64_t total,
+	r0371	                  std::uint64_t count) {
+	r0372	    out << "# cppdb-configure-source v1\n";
+	r0373	    out << "# source_kind=configure_1\n";
+	r0374	    out << "# role=generated_symbol_candidate\n";
+	r0375	    out << "# record_mode=escaped_line\n";
+	r0376	    out << "# width=" << options.width << '\n';
+	r0377	    out << "# alphabet_name=" << options.alphabet_name << '\n';
+	r0378	    out << "# alphabet_size=" << alphabet.size() << '\n';
+	r0379	    out << "# expected_total=" << total << '\n';
+	r0380	    out << "# start=" << options.start << '\n';
+	r0381	    out << "# emitted_records=" << count << '\n';
+	r0382	    out << "# truncated=" << (options.start + count < total ? "true" : "false") << '\n';
+	r0383	
+	r0384	    for (std::uint64_t i = 0; i < count; ++i) {
+	r0385	        const std::uint64_t ordinal = options.start + i;
+	r0386	        const std::string value = make_record_value(ordinal, options.width, alphabet);
+	r0387	        out << "record\t"
+	r0388	            << ordinal << '\t'
+	r0389	            << "generated_symbol_candidate\t"
+	r0390	            << options.width << '\t'
+	r0391	            << hex64(fnv1a_64(value)) << '\t'
+	r0392	            << escape_field(value) << '\n';
+	r0393	    }
+	r0394	}
+	r0395	
+	r0396	void print_plan(const Options& options,
+	r0397	                const std::string& alphabet,
+	r0398	                std::uint64_t total,
+	r0399	                std::uint64_t count) {
+	r0400	    std::cout
+	r0401	        << "configure_1 dry run\n"
+	r0402	        << "  output: " << options.output_path << '\n'
+	r0403	        << "  width: " << options.width << '\n'
+	r0404	        << "  alphabet: " << options.alphabet_name << " (" << alphabet.size() << " characters)\n"
+	r0405	        << "  expected total: " << total << '\n'
+	r0406	        << "  start: " << options.start << '\n'
+	r0407	        << "  records selected: " << count << '\n'
+	r0408	        << "  execute: false\n\n"
+	r0409	        << "Add --execute to write the escaped cppdb source-record output.\n";
+	r0410	}
+	r0411	
+	r0412	int run(int argc, char** argv) {
+	r0413	    const Options options = parse_options(argc, argv);
+	r0414	    const std::string alphabet = alphabet_for_name(options.alphabet_name);
+	r0415	
+	r0416	    std::uint64_t total = 0;
+	r0417	    if (!safe_power(static_cast<std::uint64_t>(alphabet.size()), options.width, total)) {
+	r0418	        throw std::runtime_error("Combination count overflowed uint64_t.");
+	r0419	    }
+	r0420	
+	r0421	    const std::uint64_t count = requested_count(options, total);
+	r0422	    validate_safety(options, count);
+	r0423	
+	r0424	    if (!options.execute) {
+	r0425	        print_plan(options, alphabet, total, count);
+	r0426	        return 0;
+	r0427	    }
+	r0428	
+	r0429	    if (options.output_path == "-") {
+	r0430	        StreamSink sink(std::cout);
+	r0431	        Writer writer(sink);
+	r0432	        write_output(writer, options, alphabet, total, count);
+	r0433	        return 0;
+	r0434	    }
+	r0435	
+	r0436	    if (!options.overwrite && file_exists(options.output_path)) {
+	r0437	        throw std::runtime_error("Output file already exists. Use --overwrite to replace it: " +
+	r0438	                                 options.output_path);
+	r0439	    }
+	r0440	
+	r0441	    FileSink sink(options.output_path);
+	r0442	    Writer writer(sink);
+	r0443	    write_output(writer, options, alphabet, total, count);
+	r0444	    std::cout << "Wrote " << count << " configure_1 records to " << options.output_path << '\n';
+	r0445	    return 0;
+	r0446	}
+	r0447	
+	r0448	} // namespace
+	r0449	
+	r0450	int main(int argc, char** argv) {
+	r0451	    try {
+	r0452	        return run(argc, argv);
+	r0453	    } catch (const std::exception& ex) {
+	r0454	        std::cerr << "configure_1 error: " << ex.what() << '\n';
+	r0455	        return 1;
+	r0456	    }
+	r0457	}
+	r0458	
+
+}
