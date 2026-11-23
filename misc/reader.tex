@@ -1,0 +1,172 @@
+% Standalone first service manual for the Semantic Operating System kernel.
+\documentclass[11pt,a4paper]{article}
+\def\SOSLoadContractRules{1}
+\input{kernel-contract.tex}
+\SosDeclareApi{api.read.open@1}
+\SosDeclareApi{api.read.advance@1}
+\SosDeclareApi{api.read.report@1}
+\SosDeclareData{data.read.state@1}{api.read.open@1}
+\SosDeclareAlgorithm{algorithm.read@1}{api.read.open@1,api.read.advance@1,api.read.report@1}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[left=23mm,right=23mm,top=24mm,bottom=23mm,headheight=15pt,headsep=6mm,footskip=10mm]{geometry}
+\usepackage{amsmath,amssymb,array,booktabs,tabularx,xcolor,fancyhdr,fancyvrb}
+\usepackage[unicode,hidelinks]{hyperref}
+\hypersetup{pdftitle={Reader service},pdfsubject={Semantic Operating System service contract and verification}}
+\definecolor{ink}{HTML}{192C37}
+\definecolor{tealref}{HTML}{155B61}
+\definecolor{quiet}{HTML}{465D66}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\setlength{\emergencystretch}{1.5em}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\sffamily\small\color{quiet}Semantic Operating System}
+\fancyhead[R]{\sffamily\small\color{quiet}Reader service}
+\fancyfoot[L]{\sffamily\footnotesize\color{quiet}\hyperlink{contract}{Contract}\quad
+  \hyperlink{trace}{Pseudocode}\quad\hyperlink{examples}{Run the reader}}
+\fancyfoot[R]{\sffamily\small\color{ink}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+\newcommand{\readerpage}[3]{\hypertarget{#1}{}\pdfbookmark[1]{#3}{bm-#1}%
+  {\sffamily\bfseries\small\color{tealref}#2\par}%
+  {\sffamily\bfseries\fontsize{24}{27}\selectfont\color{ink}#3\par}\smallskip}
+\newcommand{\readerhead}[1]{\par\addvspace{6pt}{\sffamily\bfseries\color{tealref}#1\par}\nobreak}
+
+\DefineVerbatimEnvironment{sample}{Verbatim}{fontsize=\small}
+\raggedbottom
+\begin{document}
+\color{ink}
+\readerpage{contract}{Algorithm service}{Reader service}
+The reader visits a finite collection of claims and builds one ordered terminology relation for each claim. Supply the terminology in the claim's own context. The caller determines which terms apply and in which order they appear.
+
+\readerhead{What a relation records}
+Let $C$ be the finite set of submitted claim identities. For each $c\in C$, let $T_c$ be the collection of terminology values supplied in that claim's context. A successful relation is the pair
+\[
+                \bigl(c,(t_1,\ldots,t_n)\bigr),
+         \qquad t_i\in T_c,\qquad n\in\{2,3,5\}.
+\]
+The first component identifies the owning claim. The second is a tuple with $n$ ordered positions. For instance, a three-place relation can record \emph{sensor}, \emph{reports}, \emph{temperature} in those roles. Moving \emph{reports} changes the tuple. Two claims can have the same tuple and still own different relations. The source notation $t_1\sim t_2\sim\cdots\sim t_n$ joins those positions. It makes no assertion of logical equivalence or of the truth of a claim.
+
+\readerhead{Generated services}
+The executable registers the following identifiers with \texttt{make\_kernel()}. Its entry point is \texttt{kernel.run(service\_id, argument)}.
+
+\begin{tabularx}{\linewidth}{@{}>{\ttfamily\small}l@{\hspace{4mm}}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textsf{Catalog identifier} & \textbf{Contract}\\\midrule
+api.read.open@1 & Validate the complete batch and establish its initial state.\\
+api.read.advance@1 & On an unread claim, commit one owned relation. At exhaustion, signal that no unread member remains.\\
+api.read.report@1 & Produce the ordered JSON result from an exhausted state.\\
+data.read.state@1 & Construct reader state using the singleton dependency \texttt{api.read.open@1}.\\
+algorithm.read@1 & Execute open, advance and report through the three declared API dependencies.\\
+\bottomrule
+\end{tabularx}
+
+\readerhead{Representation in the fixed kernel}
+The exact claim ID is the name of its SOS record. The payload comprises the claim text followed by its ordered terms. Each field is prefixed by its UTF-8 byte length in decimal and a hash sign. The \texttt{sos.byte@1} profile uses a one-dimensional record with one cell per payload byte. Each cell contains the sole primitive with multiplicity equal to that byte, from $0$ through $255$. Thus its natural rank equals the byte value. The physical shape measures payload bytes. Relation arity counts terminology slots.
+
+{\small\color{quiet}Kernel references within \texttt{sos-v2.pdf}: page~8 defines UTF-8 and record framing, page~9 defines named records in a registry snapshot, and page~10 defines canonical rank and unrank.}
+
+
+\clearpage
+\readerpage{trace}{Source correspondence}{Reading the twelve instructions}
+The line labels below are the author's labels in \texttt{sos-v2\_services/reading-algorithm.txt}. The labels span the one-claim procedure, its arity examples and the loop over unread claims. Comment delimiters and a blank separator retain their labels.
+
+\begin{tabularx}{\linewidth}{@{}>{\ttfamily\bfseries}l@{\hspace{5mm}}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textsf{Label} & \textbf{Meaning in the service}\\\midrule
+x00 & Open \texttt{read\_claim}. Its argument identifies a member of the finite claim set.\\
+x01 & Construct one relation owned by the current claim. Its tuple has exactly two, three or five places.\\
+x02 & Open the explanatory comment giving the term-slot convention.\\
+x03 & Introduce the common terminology prefix. For two places, keep the term in slot 1 followed by the term in slot 2.\\
+x04 & For three places, keep slots $(1,2,3)$ in order.\\
+x05 & For five places, keep slots $(1,2,3,4,5)$ in order.\\
+x06 & Close the arity comment.\\
+x07 & Close the one-claim procedure.\\
+x08 & Blank separator between the procedure and its driver.\\
+x09 & Check the number of unread claims. Enter the body only when at least one remains.\\
+x10 & Select one unread member, read it once and advance past it.\\
+x11 & End the loop. After processing all claims, return process status $0$.\\
+\bottomrule
+\end{tabularx}
+
+\readerhead{Why the loop ends}
+Let $U$ be the unread members and let $O$ be the sequence of completed relations. Initially $U=C$ and $O$ is empty. Each successful iteration selects a member $c\in U$, appends exactly one relation owned by $c$, and removes $c$ from $U$. Thus $|U|+|O|=|C|$ throughout, and $|U|$ falls by one at every step. Finite $C$ gives termination after exactly $|C|$ successful reads. The API driver makes one final exhaustion probe, for $|C|+1$ total advance calls. With $C=\varnothing$ the first probe consumes nothing, the result is empty and the process exits $0$.
+\readerhead{Membership, order and failure}
+The accepted claim array fixes the visit order. The claim at the next unread position supplies the identity and terms used to build its relation. Distinct IDs identify distinct members even when their text agrees. Repeated terms remain in their original positions. A malformed member rejects the batch before a successful report can be emitted. The process writes either its complete success response on standard output, or an error object on standard error and no partial collection on standard output.
+
+\clearpage
+\readerpage{examples}{Calling the service}{Run the reader}\label{worked-input}
+From the \texttt{sos-v2\_services} directory, save the following UTF-8 JSON as \texttt{claims.json}. Duplicate JSON keys are rejected. The top-level object has exactly the \texttt{claims} field. Every array member has exactly \texttt{id}, \texttt{text} and \texttt{terms}. Supply nonempty Unicode text for each ID, claim and term. The array order determines visit order, and IDs must be unique.
+
+\readerhead{Input file}
+\begin{sample}
+{"claims":[
+  {"id":"z","text":"A sends B to C",
+   "terms":["A","sends","B","to","C"]},
+  {"id":"a","text":"A follows B","terms":["A","B"]},
+  {"id":"m","text":"Tap fills cup","terms":["tap","fills","cup"]}
+]}
+\end{sample}
+\readerhead{Invocation}
+\begin{sample}
+python reading_service.py claims.json
+\end{sample}
+\readerhead{Standard output and exit status}
+The process exits $0$ and returns the JSON value below. Line breaks here make the fields easier to compare. The first relation still belongs to \texttt{z}, even though \texttt{a} sorts first alphabetically.
+\begin{sample}
+{"status":0,"unread":0,"relations":[
+  {"id":"z","text":"A sends B to C","arity":5,
+   "terms":["A","sends","B","to","C"]},
+  {"id":"a","text":"A follows B","arity":2,"terms":["A","B"]},
+  {"id":"m","text":"Tap fills cup","arity":3,
+   "terms":["tap","fills","cup"]}
+]}
+\end{sample}
+
+\readerhead{Empty input set}
+With no filename, the command reads JSON from standard input. In PowerShell run
+\begin{sample}
+'{"claims":[]}' | python reading_service.py
+\end{sample}
+The process exits $0$ and writes the following response. An empty array is an explicit finite set containing no claims.
+\begin{sample}
+{"status":0,"unread":0,"relations":[]}
+\end{sample}
+
+\clearpage
+\readerpage{rejection}{Verification}{Rejecting a malformed member}
+Save this request as \texttt{invalid.json} in the service directory. The first member has two terms. The second has four.
+\begin{sample}
+{"claims":[
+  {"id":"first","text":"A follows B","terms":["A","B"]},
+  {"id":"bad","text":"Four positions","terms":["a","b","c","d"]}
+]}
+\end{sample}
+\begin{sample}
+python reading_service.py invalid.json
+\end{sample}
+The process exits $2$. Standard output is empty, so the caller never receives a relation for \texttt{first} from this failed request. Standard error contains one JSON object.
+
+\begin{sample}
+{"error":"InvalidInput",
+ "message":"claims[1].terms must contain exactly 2, 3, or 5 strings"}
+\end{sample}
+The array index starts at zero. Index 1 therefore names \texttt{bad}. To correct the request, supply its intended ordered relation of length two, three or five, then resubmit the whole batch.
+
+\readerhead{Checking a success}
+Compare the number of returned relations with the number of submitted claims. At position $i$, compare the ID and text with the input claim at $i$. The output \texttt{arity} must equal the returned term count, and each term must equal the input value at the same position. Verify \texttt{unread} and \texttt{status} are both zero. These checks also apply to the empty response.
+\readerhead{Inspecting one step in Python}
+From the service directory, the generated data service can supply a state for a step-by-step read. This example reuses the valid \texttt{claims.json} from page~\pageref{worked-input}.
+\begin{sample}
+import json
+from pathlib import Path
+from reading_service import make_kernel
+payload = json.loads(Path("claims.json").read_text(encoding="utf-8"))
+kernel = make_kernel()
+state = kernel.run("data.read.state@1", payload)
+state, consumed = kernel.run("api.read.advance@1", state)
+\end{sample}
+Here \texttt{consumed} is true and two claims remain unread. A direct \texttt{api.read.report@1} call on this state raises \texttt{IncompleteReading}. Two more advances consume the remaining claims. The next advance returns the unchanged state and false. Report now produces the success value on page~\pageref{worked-input}.
+
+\end{document}
+

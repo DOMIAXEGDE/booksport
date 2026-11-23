@@ -1,0 +1,35 @@
+/*
+	formalize this operating-system with a 'structure-substrate-name' focus. Each 'structure-substrate' is a quantifiable (text to integer, and integer to text, capable), n-dimensional, structure, whose detail differs from observer-point-of-origin to observer-point-of-origin
+*/
+
+// create an n-dimensional array to store all 'structure-substrate' objects by 'structure-substrate-name'. To be used with 'structure_substrate ( < structure-substrate-name > , boolean-complete );' and 'status_ping ( complete );'
+
+structure_substrate ( < structure-substrate-name > , boolean-complete ) {
+
+	return < structure-substrate-name >, status_ping ( boolean-complete );
+
+}
+
+status_ping ( complete ) {
+
+	if ( complete == 1 ) {
+
+		learn = 0;
+
+	} elif ( complete == 1 ) {
+
+		learn = 1;
+
+	}
+
+	return learn;
+
+}
+
+int main (  ) {
+
+	input1 = 0;
+	x1 = structure_substrate ( < structure-substrate-name > , input1 );
+	return 0;
+
+}

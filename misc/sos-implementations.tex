@@ -1,0 +1,128 @@
+% Each procedure reads one fixed namespace and uses exact, unbounded integer arithmetic.
+\newcommand{\sosstep}[1]{\par\addvspace{3pt}\noindent{\sffamily\bfseries\color{tealref}#1}\enspace\ignorespaces}
+\newcommand{\sosop}[1]{\textsf{#1}}
+\soschapter{implementations}{Implementations}{Implementation 1 of 5}{Reversible record codec}
+\manualtarget{impl-1}\label{sos-impl-one}
+\begingroup\small\raggedright
+The five procedures implement one SOS, from record input to observed output. The last procedure combines them into three complete operating profiles. The codec first converts exact text or a complete record into an integer and recovers the input. Supply a fixed catalog of algebra profiles keyed by exact text. A profile declares an ordered alphabet of length $d$, its count domain and any admissibility test. This catalog is the shared input to all five implementations.
+
+\sosstep{Encode and decode text.}
+For each Unicode scalar, write its nonnegative integer value in binary. Choose the row for its value, left-pad with zero bits to fill the slots marked $b$, and insert the bits from most to least significant. Concatenate the bytes in order. Hexadecimal bounds below use digits 0--9 and A--F for values 10--15.
+\begin{center}\small
+\begin{tabular}{@{}ll@{}}\toprule
+Scalar value (hexadecimal) & UTF-8 byte patterns, in order\\\midrule
+\texttt{0--7F} & \texttt{0bbbbbbb}\\
+\texttt{80--7FF} & \texttt{110bbbbb 10bbbbbb}\\
+\texttt{800--FFFF}, excluding \texttt{D800--DFFF} &
+\texttt{1110bbbb 10bbbbbb 10bbbbbb}\\
+\texttt{10000--10FFFF} & \texttt{11110bbb 10bbbbbb 10bbbbbb 10bbbbbb}\\\bottomrule
+\end{tabular}\end{center}
+To decode, read the bytes from first to last. Match each leading byte, consume its continuation bytes, join their $b$ bits and check that the value belongs to the selected row. Reject truncation, invalid bytes and values outside the row. To obtain $E(s)$, start $v=1$ and update $v\gets256v+b$ for each byte $b$. To invert $E$, require a positive integer. Repeatedly take quotient and remainder by 256 until the quotient is zero. Read the remainders in reverse order, require first byte 1, and UTF-8-decode the remaining bytes.
+
+\sosstep{Pack a record.}
+Validate the nonempty name $s$, known profile $\lambda$, dimension $n\geq1$, nonnegative extents $h_1,\ldots,h_n$, and one admissible $d$-vector per cell. Traverse cells with the last coordinate changing fastest. Form text fields in the order $s,\lambda,n,h_1,\ldots,h_n$, followed by each vector's coordinates in alphabet order. For each field $f$ append its UTF-8 byte length in decimal, the character \texttt{\#}, then $f$. Return $E$ of the concatenated text. Integers use ASCII digits without leading zeros except \texttt{0}. A negative signed count uses a minus followed by a nonzero magnitude.
+
+\sosstep{Unpack an integer.}
+Invert $E$ and parse the resulting bytes from the beginning. Each frame consumes a canonical decimal length, a \texttt{\#}, and exactly that many valid UTF-8 bytes. Read the first three fields, resolve $\lambda$, read $n$ extents, then $d\prod_j h_j$ counts. Require each field's declared type, the record checks above, and exact end of input. Return the reconstructed record or \sosop{InvalidInput}. A zero extent consumes zero cell fields.
+
+\sosstep{Checks.}
+$E(\text{empty text})=1$. A single zero byte gives 256. Encoding an empty registry name fails. A \texttt{\#} inside a field survives decoding because the length fixes its end. For every accepted record $R$, unpacking its packed integer returns $R$. Canonical framing also makes repacking an accepted integer reproduce it.
+\sources{\linesref{D}{2}{5}\quad\linesref{M}{662}{678}\quad\hyperlink{q2}{Answer 2}}
+\endgroup
+
+\soschapter{impl-2}{Implementations}{Implementation 2 of 5}{Named registry and status}
+\label{sos-impl-two}
+\begingroup\small\raggedright
+The registry accepts records from \hyperlink{impl-1}{the codec}. It returns a new snapshot when a registration succeeds. Passing the chosen snapshot explicitly makes repeated reads reproducible.
+
+\sosstep{State.}
+A snapshot $S=(G,L,P)$ has a finite coordinate grid $G$, a partial map $L$ from exact nonempty names to positions, and a partial array $P$ from positions to records. Grid indices start at zero. An empty registry has $L=P=\varnothing$. In a supplied snapshot, verify that $L$ is injective, that its occupied positions equal the keys of $P$, that all these positions lie in $G$, and that every record $P(L(s))$ validates and has name $s$. Reject a malformed snapshot before serving requests. A record body has its own independent shape.
+
+\sosstep{Register$(S,g,v)$.}
+Here $g$ is a grid coordinate and $v$ is a packed record. Apply the following steps in order.
+\begin{enumerate}\setlength{\itemsep}{1pt}
+\item Unpack $v$ with implementation 1. Require $g$ to have the grid's number of indices and each index to be an integer in bounds. On either failure return \sosop{InvalidInput}.
+\item Let $R$ be the decoded record. If $R.s$ is present in $L$, return \sosop{DuplicateName}. If $g$ is present in $P$, return \sosop{OccupiedPosition}.
+\item Construct $L'=L\cup\{R.s\mapsto g\}$ and $P'=P\cup\{g\mapsto R\}$. Return $(G,L',P')$ together, as one new snapshot. A rejected operation returns its error and leaves $S$ available to the caller.
+\end{enumerate}
+
+\sosstep{Lookup$(S,s)$.}
+Require exact, valid, nonempty text. Reject malformed names as \sosop{InvalidInput}. If $s$ is absent from $L$, return \sosop{UnknownName}. Otherwise return $P(L(s))$. Equality compares the sequence of scalar values exactly, including case and whitespace.
+
+\sosstep{StructureSubstrate$(S,s,c)$.}
+Validate the name and the Boolean $c\in\{0,1\}$ before looking up $s$. Pass through a lookup error. After success return the pair $(s,1-c)$ with its own copy of the name. The second field is the adopted total \texttt{status\_ping} result. The original draft repeats its test for $c=1$ and leaves the $c=0$ path unspecified.
+
+\sosstep{Checks.}
+Register a valid record named \texttt{lamp} at an unoccupied $g$. Lookup in the old empty snapshot returns \sosop{UnknownName}. Lookup in the returned snapshot retrieves the original record. Registering the same name again returns \sosop{DuplicateName}. In the returned snapshot, flags $0$ and $1$ yield $(\texttt{lamp},1)$ and $(\texttt{lamp},0)$. Flag $2$ yields \sosop{InvalidInput} even for an absent name.
+\sources{\linesref{D}{5}{11}, \linesref{D}{13}{33}\quad\hyperlink{q9}{Answer 9}\quad\hyperlink{q11}{Answer 11}}
+\endgroup
+
+\soschapter{impl-3}{Implementations}{Implementation 3 of 5}{Rank and evaluate a cell}
+\label{sos-impl-three}
+\begingroup\small\raggedright
+The input is a fixed namespace $\lambda$, an operation, and two addresses tagged with $\lambda$. The profile declares dimension $d\geq1$, the tensor $T_{ij}^{k}\in\mathbb N_0$ for every input pair and output index, and a natural or signed count domain. A restriction supplies a terminating membership test and either its finite domain size or a declaration that the domain is infinite. A relabeling supplies mutually inverse permutations $\pi,\pi^{-1}$ of the rank space. Use identity functions when labels are canonical.
+
+\sosstep{Enumerate configurations.}
+Visit shells $t=0,1,\ldots$. In a natural shell, visit tuples in $\{0,\ldots,t\}^d$ in lexicographic order and retain those with $\sum_i x_i=t$. In a signed shell, visit $\{-t,\ldots,t\}^d$ in the same order and retain those with $\sum_i |x_i|=t$. In either case emit only tuples admitted by the profile. Lexicographic traversal increments the last coordinate fastest. Every admissible tuple occurs once, at a finite position. The loops prioritize simplicity over speed.
+
+\sosstep{Rank$(\lambda,x)$ and Unrank$(\lambda,a)$.}
+For rank, require an admitted vector with $d$ integer components. Count emitted tuples preceding $x$, starting the counter at zero, and return $\pi$ of this count. For unrank, require a matching namespace and a nonnegative integer address. When the declared size is $m<\infty$, reject $a\ge m$ immediately. Apply $\pi^{-1}$ to $a$ and return the tuple emitted at that zero-based position. A bad address, mismatched namespace, or malformed request returns \sosop{InvalidInput}. These contracts give $\operatorname{Unrank}(\lambda,\operatorname{Rank}(\lambda,x))=x$ and the converse for valid addresses.
+
+\sosstep{Evaluate$(\lambda,\omega,a,b)$.}
+Validate the operation, unrank both inputs as $x,y$, and propagate input errors. For addition or subtraction, form $z_k=x_k+y_k$ or $z_k=x_k-y_k$. For multiplication, initialize all $z_k$ to zero and for every $i,j,k$ add $x_i y_jT_{ij}^{k}$ to $z_k$. For these three operations, return $\mathsf{Fail}$ if the resulting vector falls outside the profile, including a negative natural residual. Otherwise return $\mathsf{Val}(\operatorname{Rank}(\lambda,z))$. For right or left division dispatch $(\lambda,x,y,\text{side})$ to \hyperlink{impl-4}{implementation 4}.
+
+\sosstep{Checks.}
+With the natural neutral--toggle table of \linesref{T}{889}{914}, the mixed vector $(1,1)$ has rank 4. Adding addresses 1 and 2 gives $\mathsf{Val}(4)$, and removing address 1 from address 4 gives $\mathsf{Val}(2)$. Removing address 1 from 2 gives $\mathsf{Fail}$. Restrict the carrier to $\{(0,0),(1,1)\}$ to obtain rank 1 for the same mixed vector and \sosop{InvalidInput} when decoding address 2.
+\sources{\linesref{T}{125}{185}, \linesref{T}{190}{242}, \linesref{T}{481}{534}, \linesref{T}{753}{810}, \linesref{T}{851}{871}}
+\endgroup
+
+\soschapter{impl-4}{Implementations}{Implementation 4 of 5}{Reconstruct every factor}
+\label{sos-impl-four}
+\begingroup\small\raggedright
+Given a side and the validated vectors $x,y$ from \hyperlink{impl-3}{the evaluator}, return $\mathsf{Sol}$ of the ranks of \emph{all} admissible $q$ solving $Aq=x$. For right division set $A_{ki}=\sum_j T_{ij}^k y_j$. For left division set $A_{ki}=\sum_j T_{ji}^k y_j$. An infinite answer is represented by a parameterized set.
+
+\sosstep{Natural counts.}
+For column $i$ compute $c_i=\sum_k A_{ki}$. Write $F=\{i:c_i=0\}$ for the free coordinates. Nonnegativity makes each such column identically zero. For every other $i$ enumerate $0\le q_i\le\lfloor(\sum_k x_k)/c_i\rfloor$ in a finite Cartesian product. Fill the free entries with zeros and retain a base vector only if $Aq=x$. The result contains every retained base with its free entries independently replaced by arbitrary nonnegative integers. When there are no bounded coordinates, test the one empty tuple. With no retained bases the answer is empty. With any base and any free coordinate it is infinite in the unrestricted natural profile. The bounds follow by summing the rows of $Aq=x$.
+
+\sosstep{Signed counts.}
+Use the following recursion for an arbitrary integer matrix $A$ with $m$ columns and target $b$ (initially $x$).
+\begin{enumerate}\setlength{\itemsep}{0pt}\setlength{\topsep}{2pt}
+\item Drop every all-zero row with zero target. An all-zero row with nonzero target returns the empty set. With no rows left, return $\mathbb Z^m$ including the single empty tuple when $m=0$.
+\item Start $U$ as the $m$-square identity. Pick a remaining row, move it and its target entry to the top, and swap a nonzero column into position one. Apply that column swap and every subsequent column operation to both $A$ and $U$.
+\item While another entry $a_j$ of the first row is nonzero, put $a=A_{11}$. Choose the integer $k$ with $0\le a_j-ka<|a|$. Subtract $k$ times column one from column $j$. If its new top entry is nonzero, swap columns $j$ and one. Each such swap decreases the pivot magnitude.
+\item Only $a=A_{11}\ne0$ now remains in the top row. Return empty unless $a$ divides $b_1$. Fix $p=b_1/a$ and recurse on the lower rows and columns $2,\ldots,m$, with target $b_i-A_{i1}p$ in each lower row. Return $U(p,t)$ for every tuple $t$ the recursion returns. The reversible column operations preserve every integer solution in these coordinates.
+\end{enumerate}
+
+\sosstep{Apply the namespace and check.}
+Intersect the resulting family with the profile's admissible set and take its pointwise rank image. For a finite restriction one may enumerate its members and test $Aq=x$ directly. An infinite restriction can retain membership as a symbolic filter. When $y=0$, the ambient result is the whole carrier for $x=0$ and empty otherwise. In the neutral--toggle example, dividing $(1,1)$ by itself gives $q_1+q_2=1$. The natural identifier set is $\{1,2\}$. The signed configurations are $(t,1-t)$ for all integers $t$.
+\sources{\linesref{T}{377}{428}, \linesref{T}{773}{777}, \linesref{T}{843}{849}, \linesref{T}{922}{934}}
+\endgroup
+
+\soschapter{impl-5}{Implementations}{Implementation 5 of 5}{Dispatch an observer query}
+\label{sos-impl-five}
+\begingroup\small\raggedright
+Use a fixed snapshot $S$, the profile catalog, and an observer table. An observer entry $(o,\lambda)$ supplies a total map $\sigma_o$ on admitted configurations. The request specifies an exact name $s$ and one of the following operations. The response carries the operation's result type.
+
+\sosstep{Dispatch$(S,s,\text{request})$.}
+Reject an unrecognized operation, a malformed name or wrongly typed arguments as \sosop{InvalidInput}. Process a status request with \hyperlink{impl-2}{StructureSubstrate}. A full-record request returns \hyperlink{impl-1}{Pack} of the looked-up record. Other operations start with \hyperlink{impl-2}{Lookup} and propagate \sosop{UnknownName} for an absent, well-formed name.
+\begin{enumerate}\setlength{\itemsep}{1pt}
+\item For $\sosop{View}(o)$, resolve the registered map for $(o,R.\lambda)$ or return \sosop{InvalidInput}. Visit the cells of $R$ in row-major order. In a newly allocated output array of the same shape place $\sigma_o(B[g])$ at each $g$. Return the original name and shape with that output array. A zero extent yields an empty view of that shape.
+\item For $\sosop{Cell}(g)$, require an integer coordinate for each inner axis with $0\le g_j<h_j$. Otherwise return \sosop{InvalidInput}. Return the address of $B[g]$ from \hyperlink{impl-3}{Rank}, tagged with $R.\lambda$.
+\item For $\sosop{Calculate}(g,\omega,b)$, resolve the cell address and pass it as the first operand to \hyperlink{impl-3}{Evaluate} with the supplied second address $b$. Both addresses use the cell's namespace. Division returns \hyperlink{impl-4}{a solution set}. These reads use the stored multiplicities, including when an earlier view combined distinguishable configurations.
+\end{enumerate}
+
+\sosstep{Operating profile A. Natural inventory.}
+Use namespace \texttt{nt}, all nonnegative count pairs, the canonical rank and alphabet (neutral, toggle). Neutral is the identity and two toggles compose to neutral. Pack the record \texttt{lamp} of shape $(1,1)$ with sole cell $(1,1)$. The exact text to which $E$ is applied is
+\begin{center}\ttfamily 4\#lamp2\#nt1\#21\#11\#11\#11\#1\end{center}
+Register the integer in an empty one-position registry at $(0)$. In the resulting snapshot, a status request with $c=0$ returns $(\texttt{lamp},1)$. At inner coordinate $(0,0)$, a cell request returns $(\texttt{nt},4)$. A view using $\sigma(x)=\sum_i x_i$ returns \texttt{lamp}, shape $(1,1)$ and sole value 2. A calculation at $(0,0)$ requesting right division by $(\texttt{nt},4)$ returns $\mathsf{Sol}(\{1,2\})$ in \texttt{nt}. Either factor, multiplied on the right by the original mixed cell, reconstructs it. Unpacking a full-record response recovers the original record.
+
+\sosstep{Operating profile B. Signed balance.}
+Give namespace \texttt{bal} one primitive $u$ with $u\star u=u$, carrier $\mathbb Z$, and the canonical signed rank. Pack a one-cell record \texttt{net} holding $-2$, register it at $(0)$ in a fresh grid, and observe the signed count itself. Its cell has address 3. Subtract address 2 (the count $+1$) to obtain $\mathsf{Val}(5)$, which decodes to $-3$. A status request with $c=1$ returns $(\texttt{net},0)$.
+
+\sosstep{Operating profile C. Capacity register.}
+For capacity $K\ge1$ choose a dedicated namespace, the same one-primitive table and carrier $D=\{0,\ldots,K\}$ in ascending rank order. Pack and register a one-cell record named \texttt{stock} holding $K$ at $(0)$ in a fresh grid. Observe remaining capacity as $K-x$. For $K=2$ the view gives 0. Adding address 1 to the cell returns $\mathsf{Fail}$, and dividing the cell by address 1 returns $\mathsf{Sol}(\{2\})$.
+
+\sosstep{Failure check for profile A.}
+Coordinate $(0,1)$ is outside the inner shape and yields \sosop{InvalidInput}. Running the same well-formed name request on the old empty registry yields \sosop{UnknownName}. These interface errors occur before algebraic evaluation.
+\sources{\linesref{D}{29}{35}\quad\linesref{T}{539}{599}, \linesref{T}{889}{934}\quad\hyperlink{q12}{Answer 12}}
+\endgroup

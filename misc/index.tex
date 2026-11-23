@@ -1,0 +1,86 @@
+\soschapter{index}{Subject index}{Reference}{Subject index}
+The middle column takes you to a definition or a formal result. The last column takes you to a procedure, discussion or worked example. All page numbers refer to this edition.
+
+\newcommand{\idxrow}[3]{#1 & \manualpage{#2} & \manualpage{#3}\\}
+\begingroup\small\renewcommand{\arraystretch}{1.10}
+\begin{tabular}{@{}p{.62\linewidth}rr@{}}
+\toprule
+\textbf{Subject} & \textbf{Definition} & \textbf{Use}\\
+\midrule
+\idxrow{Address, canonical}{g-rank}{impl-3}
+\idxrow{Addition and aggregation}{law-3}{q4}
+\idxrow{Admissible domain and closure}{g-restricted}{q8}
+\idxrow{Alphabet and alphabet order}{law-1}{q3}
+\idxrow{Array shape, extents and empty cells}{g-shape}{q1}
+\idxrow{Associativity and commutativity}{law-5}{q5}
+\idxrow{Boolean completion and learning flag}{g-completion}{impl-2}
+\idxrow{Canonical indexing and unranking}{law-2}{impl-3}
+\idxrow{Cardinality, total number of occurrences}{law-1}{q7}
+\idxrow{Cell configuration and equality}{g-configuration}{q3}
+\idxrow{Codec, byte order and round trip}{g-codec}{impl-1}
+\idxrow{Composition and primitive output tensor}{g-tensor}{q5}
+\idxrow{Decoder errors and absent names}{g-errors}{impl-2}
+\idxrow{Division, exact left and right quotients}{g-quotient}{impl-4}
+\idxrow{Empty result, empty configuration and failure}{g-evaluator}{q6}
+\idxrow{Fiber, finite or infinite solution set}{g-fiber}{impl-4}
+\idxrow{Framing a record}{g-framing}{impl-1}
+\idxrow{Identifier arithmetic and transport}{g-transport}{impl-3}
+\idxrow{Interpretation and observer equivalence}{g-observer}{q7}
+\idxrow{Matrix and free quotient coordinates}{law-6}{impl-4}
+\idxrow{Monoid and multiplicative identity}{law-11}{q5}
+\idxrow{Name, registry and snapshot}{g-registry}{impl-2}
+\idxrow{Namespace and rank stability}{g-namespace}{q8}
+\idxrow{Neutral and toggle}{g-neutral-toggle}{q12}
+\idxrow{Observer query and view}{g-observer}{impl-5}
+\idxrow{Reconstruction from a known factor}{g-quotient}{q6}
+\idxrow{Record and structure-substrate}{g-record}{q1}
+\idxrow{Residual and exact subtraction}{g-residual}{q4}
+\idxrow{Restricted configurations}{g-restricted}{impl-5}
+\idxrow{Semantic compatibility}{g-semantics}{law-9}
+\idxrow{Signed configurations}{g-signed}{impl-4}
+\idxrow{Status ping and the draft's repeated guard}{g-completion}{q10}
+\idxrow{Typed evaluation outcomes}{g-evaluator}{impl-5}
+\idxrow{UTF-8 and Unicode scalar values}{g-utf8}{impl-1}
+\idxrow{Zero as dividend or divisor}{law-6}{q6}
+\bottomrule
+\end{tabular}
+\endgroup
+
+\soschapter{formula-index}{Procedure and formula index}{Reference}{Procedure and formula index}
+\textbf{Operating procedures.} Read these in order to follow a record from its serialized form through a complete observer query.
+
+\newcommand{\soslocator}[2]{\hyperlink{#1}{#2} & \manualpage{#1}\\}
+\begingroup\small\renewcommand{\arraystretch}{1.13}
+\begin{tabular}{@{}p{.76\linewidth}r@{}}
+\toprule\textbf{Procedure} & \textbf{Page}\\\midrule
+\soslocator{impl-1}{Encode and recover a record}
+\soslocator{impl-2}{Register a name, look it up and return its status}
+\soslocator{impl-3}{Convert a cell to an address and evaluate an operation}
+\soslocator{impl-4}{Recover every factor consistent with a product}
+\soslocator{impl-5}{Dispatch a query and inspect worked profiles}
+\bottomrule
+\end{tabular}
+
+\medskip
+\textbf{Original algebra.} Each topic opens the typeset mathematics. The line range opens the corresponding source in the numbered formulation.
+
+\newcommand{\soslawrow}[4]{\hyperlink{law-#1}{#2} & \manualpage{law-#1} & \linesref{T}{#3}{#4}\\}
+\begin{tabular}{@{}p{.58\linewidth}rr@{}}
+\toprule\textbf{Section} & \textbf{Page} & \textbf{Source lines}\\\midrule
+\soslawrow{1}{Primitive domain}{73}{120}
+\soslawrow{2}{Canonical sequential indexing}{125}{185}
+\soslawrow{3}{Primitive composition and configuration operations}{190}{242}
+\soslawrow{4}{Unconditional algebraic laws}{247}{300}
+\soslawrow{5}{Associativity, commutativity and identity}{305}{372}
+\soslawrow{6}{Division as nonnegative integer fibers}{377}{428}
+\soslawrow{7}{Transport to identifier arithmetic}{433}{476}
+\soslawrow{8}{Typed outcomes and total evaluation}{481}{534}
+\soslawrow{9}{Semantic interpretation and compatibility}{539}{635}
+\soslawrow{10}{Reindexing invariance}{640}{668}
+\soslawrow{11}{Finite monoid specialization}{673}{748}
+\soslawrow{12}{Admissibility restriction}{753}{810}
+\soslawrow{13}{Signed extension}{815}{884}
+\soslawrow{14}{Neutral--toggle instance}{889}{934}
+\bottomrule
+\end{tabular}
+\endgroup

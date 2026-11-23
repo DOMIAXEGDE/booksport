@@ -1,0 +1,937 @@
+% !TeX program = pdflatex
+% !TeX encoding = UTF-8
+% Object Counting Algebra -- the attached monolithic formulation.
+% Source: Pasted text.txt. All fourteen sections retain their mathematical
+% declarations and original order. Only the display layout is changed.
+%
+% Build (no shell escape, bibliography processor, or external files required):
+%   pdflatex -interaction=nonstopmode -halt-on-error oca-defined.tex
+%   pdflatex -interaction=nonstopmode -halt-on-error oca-defined.tex
+%
+% Page size remains A5. To change it, edit both occurrences of a5paper below.
+% The original all-in-one gathered display cannot break across pages. Its
+% outer alignment is therefore presented as unnumbered, breakable align*
+% blocks. Nested cases, arrays, delimiters, and mathematical content remain.
+\documentclass[10pt,a5paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[a5paper,left=14mm,right=14mm,top=15mm,bottom=16mm]{geometry}
+\usepackage{mathtools,amssymb,mathrsfs}
+\usepackage{needspace}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+  pdftitle={Object Counting Algebra},
+  pdfsubject={Monolithic mathematical formulation}
+}
+
+\allowdisplaybreaks[1]
+\setlength{\jot}{4pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\setlength{\emergencystretch}{1em}
+\raggedbottom
+
+% Compact, unnumbered headings; no extra mathematical numbering is added.
+\makeatletter
+\renewcommand\section{\@startsection{section}{1}{\z@}%
+  {2.0ex plus .6ex minus .2ex}{.8ex plus .2ex}%
+  {\normalfont\large\bfseries}}
+\makeatother
+
+\begin{document}
+
+{\LARGE\bfseries Object Counting Algebra\par}
+\vspace{2pt}
+
+The following is a single parameterized specification of the multiset construction in \emph{oca-discussion}. The general algebra, canonical encoding, operational semantics, and conditional specializations are incorporated into one formulation.
+
+\[
+\boxed{
+\begin{aligned}
+&\mathfrak O(A,T,\mathscr S,\sigma)
+:=\Big\langle
+\\[3pt]
+&\quad
+\mathcal C,\mathbf 0,\nu,\oplus,\star,\ominus,Q_{\mathrm R},Q_{\mathrm L};
+\\[3pt]
+&\quad
+I,\rho,\delta,
+\widehat{\oplus},\widehat{\star},\widehat{\ominus},
+\widehat Q_{\mathrm R},\widehat Q_{\mathrm L};
+\\[3pt]
+&\quad
+\mathscr S,\sigma,\sigma_I,\mathsf{Out}_I,\operatorname{Eval}
+\Big\rangle .
+\end{aligned}
+}
+\]
+
+% Section 01 of 14
+\Needspace{7\baselineskip}
+\section*{Primitive domain}
+\begin{align*}
+&\mathbb N_0:=\{0,1,2,\ldots\},
+\qquad
+d\in\mathbb N_{\geq 1},
+\qquad
+[d]:=\{1,\ldots,d\},
+\\
+&A:=\{o_1,\ldots,o_d\},
+\qquad
+o_1<_A o_2<_A\cdots<_A o_d,
+\\
+&\mathcal C
+:=
+\left\{
+\sum_{i=1}^{d}x_i o_i:
+x_i\in\mathbb N_0
+\right\}
+\cong
+\mathbb N_0^{d},
+\\
+&x=(x_1,\ldots,x_d)\in\mathcal C,
+\qquad
+(e_i)_k:=\mathbf 1_{\{i=k\}},
+\\
+&x=\bigoplus_{i=1}^{d}x_i e_i,
+\qquad
+\mathbf 0:=(0,\ldots,0),
+\\
+&x=y
+\iff
+\forall i\in[d],\ x_i=y_i,
+\\
+&x\preccurlyeq y
+\iff
+\forall i\in[d],\ x_i\leq y_i,
+\\
+&\nu:\mathcal C\longrightarrow\mathbb N_0,
+\qquad
+\nu(x):=\sum_{i=1}^{d}x_i,
+\\
+&\mathcal C_n:=\{x\in\mathcal C:\nu(x)=n\},
+\qquad
+|\mathcal C_n|=\binom{n+d-1}{d-1},
+\\
+&\mathcal C=\bigsqcup_{n\in\mathbb N_0}\mathcal C_n,
+\qquad
+|\mathcal C|=\aleph_0.
+\end{align*}
+
+% Section 02 of 14
+\Needspace{7\baselineskip}
+\section*{Canonical sequential indexing}
+\begin{align*}
+&x<_{\mathrm{lex}}y
+\iff{}
+\exists r\in[d]:
+\left(
+x_r<y_r
+\ \land\
+\forall h<r,\ x_h=y_h
+\right),
+\\
+&x\prec y
+\iff{}
+\nu(x)<\nu(y)
+\\*[-2pt]
+&{}\lor
+\left(
+\nu(x)=\nu(y)
+\ \land\
+x<_{\mathrm{lex}}y
+\right),
+\\
+&I:={}\mathbb N_0,
+\\
+&\rho:\mathcal C\longrightarrow I,
+\qquad
+\rho(x):={}
+\left|\{y\in\mathcal C:y\prec x\}\right|,
+\\
+&p_i(x):={}\sum_{h=1}^{i-1}x_h,
+\\
+&\rho(x)={}
+\binom{\nu(x)+d-1}{d}
+\\*[-2pt]
+&{}+
+\sum_{i=1}^{d-1}
+\sum_{a=0}^{x_i-1}
+\binom{
+\nu(x)-p_i(x)-a+d-i-1
+}{
+d-i-1
+},
+\\
+&\sum_{\varnothing}:=0,
+\qquad
+\binom{n}{k}:=0
+\quad(0\leq n<k),
+\\
+&\forall a\in I,\ \exists!x\in\mathcal C:\rho(x)=a,
+\\
+&\delta:=\rho^{-1}:I\longrightarrow\mathcal C,
+\\
+&\delta\circ\rho=\operatorname{id}_{\mathcal C},
+\qquad
+\rho\circ\delta=\operatorname{id}_{I},
+\\
+&\rho(\mathbf 0)=0,
+\qquad
+\rho(e_i)=d-i+1,
+\\
+&\rho(x)=\rho(y)\iff x=y.
+\end{align*}
+
+% Section 03 of 14
+\Needspace{7\baselineskip}
+\section*{Primitive composition and configuration operations}
+\begin{align*}
+&T=(T_{ij}^{k})_{i,j,k\in[d]}
+\in\mathbb N_0^{d\times d\times d},
+\\
+&\mu_T:A\times A\longrightarrow\mathcal C,
+\qquad
+\mu_T(o_i,o_j):=\sum_{k=1}^{d}T_{ij}^{k}e_k,
+\\
+&\oplus,\star:\mathcal C\times\mathcal C
+\longrightarrow\mathcal C,
+\\
+&(x\oplus y)_k:=x_k+y_k,
+\\
+&(x\star y)_k
+:=
+\sum_{i=1}^{d}\sum_{j=1}^{d}
+x_i y_j T_{ij}^{k},
+\\
+&e_i\star e_j=\mu_T(o_i,o_j),
+\\
+&\ominus:\mathcal C\times\mathcal C
+\rightharpoonup\mathcal C,
+\\
+&\operatorname{dom}(\ominus)
+:=
+\{(x,y)\in\mathcal C^2:y\preccurlyeq x\},
+\\
+&(x\ominus y)_k:=x_k-y_k
+\qquad
+\bigl((x,y)\in\operatorname{dom}(\ominus)\bigr),
+\\
+&\mathcal R(x,y)
+:=
+\{z\in\mathcal C:z\oplus y=x\}
+\\*
+&\hspace{39pt}=
+\begin{cases}
+\{x\ominus y\},&y\preccurlyeq x,\\
+\varnothing,&y\not\preccurlyeq x,
+\end{cases}
+\\
+&Q_{\mathrm R},Q_{\mathrm L}:
+\mathcal C\times\mathcal C
+\longrightarrow\mathcal P(\mathcal C),
+\\
+&Q_{\mathrm R}(x,y)
+:=
+\{q\in\mathcal C:q\star y=x\},
+\\
+&Q_{\mathrm L}(x,y)
+:=
+\{q\in\mathcal C:y\star q=x\}.
+\end{align*}
+
+% Section 04 of 14
+\Needspace{7\baselineskip}
+\section*{Unconditional algebraic laws}
+\begin{align*}
+&\forall x,y,z\in\mathcal C:
+\\*
+&(x\oplus y)\oplus z=x\oplus(y\oplus z),
+\\
+&x\oplus y=y\oplus x,
+\qquad
+x\oplus\mathbf 0=x,
+\\
+&x\oplus z=y\oplus z\iff x=y,
+\\
+&x\oplus y=\mathbf 0
+\iff
+x=y=\mathbf 0,
+\\
+&x\star(y\oplus z)
+=(x\star y)\oplus(x\star z),
+\\
+&(x\oplus y)\star z
+=(x\star z)\oplus(y\star z),
+\\
+&x\star\mathbf 0=\mathbf 0\star x=\mathbf 0,
+\\
+&\nu(x\oplus y)=\nu(x)+\nu(y),
+\\
+&y\preccurlyeq x
+\Longrightarrow
+(x\ominus y)\oplus y=x,
+\\
+&(x\oplus y)\ominus y=x,
+\qquad
+x\ominus x=\mathbf 0,
+\\
+&(\mathcal C,\oplus,\mathbf 0)
+\cong
+\operatorname{FreeCMon}(A),
+\\
+&\nu(x\star y)
+=
+\sum_{i=1}^{d}\sum_{j=1}^{d}
+x_i y_j
+\left(\sum_{k=1}^{d}T_{ij}^{k}\right),
+\\
+&\left[
+\forall x,y\in\mathcal C,\
+\nu(x\star y)=\nu(x)\nu(y)
+\right]
+\\*
+&\hspace{35pt}\iff
+\left[
+\forall i,j\in[d],\
+\sum_{k=1}^{d}T_{ij}^{k}=1
+\right].
+\end{align*}
+
+% Section 05 of 14
+\Needspace{7\baselineskip}
+\section*{Associativity, commutativity, and multiplicative identity}
+\begin{align*}
+&\mathsf A_T
+\iff{}
+\forall i,j,k,m\in[d]:
+\\*[-2pt]
+&\sum_{\ell=1}^{d}
+T_{ij}^{\ell}T_{\ell k}^{m}
+=
+\sum_{\ell=1}^{d}
+T_{jk}^{\ell}T_{i\ell}^{m},
+\\
+&\mathsf C_T
+\iff{}
+\forall i,j,k\in[d],\
+T_{ij}^{k}=T_{ji}^{k},
+\\
+&\mathcal U_T
+:={}
+\left\{
+u\in\mathcal C:
+\begin{array}{l}
+\displaystyle
+\forall i,k\in[d],\\[2pt]
+\displaystyle
+\sum_{j=1}^{d}u_jT_{ji}^{k}
+=
+\mathbf 1_{\{i=k\}}
+=
+\sum_{j=1}^{d}u_jT_{ij}^{k}
+\end{array}
+\right\},
+\\
+&\mathsf A_T
+\iff{}
+\forall x,y,z\in\mathcal C,\
+(x\star y)\star z=x\star(y\star z),
+\\
+&\mathsf C_T
+\iff{}
+\forall x,y\in\mathcal C,\
+x\star y=y\star x,
+\\
+&|\mathcal U_T|\leq1,
+\\
+&u\in\mathcal U_T
+\Longrightarrow{}
+u\neq\mathbf 0
+\ \land\
+\forall x\in\mathcal C,\
+u\star x=x\star u=x,
+\\
+&\mathsf A_T\land u\in\mathcal U_T
+\Longrightarrow{}
+(\mathcal C,\oplus,\star,\mathbf 0,u)
+\in\mathsf{Semiring}_1,
+\\
+&\mathsf A_T\land\mathsf C_T
+\land u\in\mathcal U_T
+\Longrightarrow{}
+(\mathcal C,\oplus,\star,\mathbf 0,u)
+\in\mathsf{CSemiring}_1,
+\\
+&u\in\mathcal U_T
+\Longrightarrow{}
+\forall n\in\mathbb N_0,\ \forall x\in\mathcal C:
+\\*[-2pt]
+&(nu)\star x=x\star(nu)=nx.
+\end{align*}
+
+% Section 06 of 14
+\Needspace{7\baselineskip}
+\section*{Division as nonnegative integer fibers}
+\begin{align*}
+&(M_{\mathrm R}(y))_{ki}
+:=
+\sum_{j=1}^{d}T_{ij}^{k}y_j,
+\\
+&(M_{\mathrm L}(y))_{ki}
+:=
+\sum_{j=1}^{d}T_{ji}^{k}y_j,
+\\
+&q\star y=M_{\mathrm R}(y)q,
+\qquad
+y\star q=M_{\mathrm L}(y)q,
+\\
+&\varepsilon\in\{\mathrm R,\mathrm L\},
+\\
+&Q_{\varepsilon}(x,y)
+=
+\{q\in\mathbb N_0^d:M_{\varepsilon}(y)q=x\},
+\\
+&Q_{\varepsilon}(x,\mathbf 0)
+=
+\begin{cases}
+\mathcal C,&x=\mathbf 0,\\
+\varnothing,&x\neq\mathbf 0,
+\end{cases}
+\\
+&Q_{\varepsilon}(\mathbf 0,y)
+=
+\{q\in\mathbb N_0^d:M_{\varepsilon}(y)q=\mathbf 0\},
+\\
+&c_i^{\varepsilon}(y)
+:=
+\sum_{k=1}^{d}(M_{\varepsilon}(y))_{ki},
+\\
+&q\in Q_{\varepsilon}(x,y)
+\Longrightarrow
+\sum_{i=1}^{d}c_i^{\varepsilon}(y)q_i=\nu(x),
+\\
+&|Q_{\varepsilon}(x,y)|=\aleph_0
+\\*[-2pt]
+&\hspace{20pt}\iff
+Q_{\varepsilon}(x,y)\neq\varnothing
+\ \land\
+\exists i\in[d],\ c_i^{\varepsilon}(y)=0,
+\\
+&\left[
+\forall x\in\mathcal C,\
+|Q_{\varepsilon}(x,y)|\leq1
+\right]
+\iff
+\det M_{\varepsilon}(y)\neq0.
+\end{align*}
+
+% Section 07 of 14
+\Needspace{7\baselineskip}
+\section*{Transport to identifier arithmetic}
+\begin{align*}
+&\widehat{\oplus},\widehat{\star}:I^2\longrightarrow I,
+\qquad
+\widehat{\ominus}:I^2\rightharpoonup I,
+\\
+&\widehat Q_{\mathrm R},\widehat Q_{\mathrm L}:
+I^2\longrightarrow\mathcal P(I),
+\\
+&a\widehat{\oplus}b
+:=
+\rho\bigl(\delta(a)\oplus\delta(b)\bigr),
+\\
+&a\widehat{\star}b
+:=
+\rho\bigl(\delta(a)\star\delta(b)\bigr),
+\\
+&\operatorname{dom}(\widehat{\ominus})
+=
+\{(a,b)\in I^2:\delta(b)\preccurlyeq\delta(a)\},
+\\
+&a\widehat{\ominus}b
+:=
+\rho\bigl(\delta(a)\ominus\delta(b)\bigr)
+\quad
+\bigl((a,b)\in\operatorname{dom}(\widehat{\ominus})\bigr),
+\\
+&\rho[U]:=\{\rho(x):x\in U\}
+\qquad
+(U\subseteq\mathcal C),
+\\
+&\widehat Q_{\varepsilon}(a,b)
+:=
+\rho\!\left[Q_{\varepsilon}(\delta(a),\delta(b))\right],
+\\
+&0_I:=\rho(\mathbf 0)=0,
+\qquad
+u\in\mathcal U_T\Longrightarrow 1_I:=\rho(u),
+\\
+&\nu_I:=\nu\circ\delta,
+\\
+&\nu_I(a\widehat{\oplus}b)
+=
+\nu_I(a)+\nu_I(b).
+\end{align*}
+
+% Section 08 of 14
+\Needspace{7\baselineskip}
+\section*{Typed outcomes and total evaluation}
+\begin{align*}
+&\mathsf{Out}_I
+:=
+\mathsf{Val}(I)
+\sqcup
+\mathsf{Sol}\bigl(\mathcal P(I)\bigr)
+\sqcup
+\{\mathsf{Fail}\},
+\\
+&\left|
+\left\{
+\mathsf{Val}(0),
+\mathsf{Sol}(\varnothing),
+\mathsf{Sol}(\{0\}),
+\mathsf{Fail}
+\right\}
+\right|=4,
+\\
+&\Omega_{\mathrm{alg}}
+:=
+\{\oplus,\star,\ominus\},
+\\
+&\Omega
+:=
+\Omega_{\mathrm{alg}}
+\sqcup
+\{\operatorname{div}_{\mathrm R},
+\operatorname{div}_{\mathrm L}\},
+\\
+&\operatorname{Eval}:
+\Omega\times I\times I\longrightarrow\mathsf{Out}_I,
+\\
+&\operatorname{Eval}(\omega,a,b)
+:=
+\begin{cases}
+\mathsf{Val}(a\widehat{\omega}b),
+&
+\begin{array}{l}
+\omega\in\Omega_{\mathrm{alg}},\\
+(a,b)\in\operatorname{dom}(\widehat\omega),
+\end{array}
+\\[5pt]
+\mathsf{Fail},
+&
+\begin{array}{l}
+\omega\in\Omega_{\mathrm{alg}},\\
+(a,b)\notin\operatorname{dom}(\widehat\omega),
+\end{array}
+\\[5pt]
+\mathsf{Sol}\bigl(\widehat Q_{\varepsilon}(a,b)\bigr),
+&
+\omega=\operatorname{div}_{\varepsilon}.
+\end{cases}
+\end{align*}
+
+% Section 09 of 14
+\Needspace{7\baselineskip}
+\section*{Semantic interpretation and compatibility}
+\begin{align*}
+&\mathscr S:=(S,\oplus_S,\star_S,0_S),
+\\
+&\oplus_S,\star_S:S^2\longrightarrow S,
+\qquad
+0_S\in S,
+\\
+&\sigma:\mathcal C\longrightarrow S,
+\qquad
+\sigma_I:=\sigma\circ\delta,
+\\
+&\mathsf H_{\sigma}
+\iff
+\left\{
+\begin{aligned}
+&\sigma(\mathbf 0)=0_S,
+\\
+&\forall x,y\in\mathcal C:
+\\
+&\sigma(x\oplus y)
+=
+\sigma(x)\oplus_S\sigma(y),
+\\
+&\sigma(x\star y)
+=
+\sigma(x)\star_S\sigma(y),
+\end{aligned}
+\right.
+\\
+&\mathcal R_S(s,t)
+:=
+\{v\in S:v\oplus_S t=s\},
+\\
+&Q_{\mathrm R}^{S}(s,t)
+:=
+\{v\in S:v\star_S t=s\},
+\\
+&Q_{\mathrm L}^{S}(s,t)
+:=
+\{v\in S:t\star_S v=s\},
+\\
+&\sigma[U]:=\{\sigma(x):x\in U\},
+\\
+&\mathsf H_{\sigma}
+\Longrightarrow
+\sigma[\mathcal R(x,y)]
+\subseteq
+\mathcal R_S(\sigma(x),\sigma(y)),
+\\
+&\mathsf H_{\sigma}
+\Longrightarrow
+\sigma[Q_{\mathrm R}(x,y)]
+\subseteq
+Q_{\mathrm R}^{S}(\sigma(x),\sigma(y)),
+\\
+&\mathsf H_{\sigma}
+\Longrightarrow
+\sigma[Q_{\mathrm L}(x,y)]
+\subseteq
+Q_{\mathrm L}^{S}(\sigma(x),\sigma(y)),
+\\
+&x\sim_{\sigma}y
+\iff
+\sigma(x)=\sigma(y),
+\\
+&\mathsf H_{\sigma}
+\Longrightarrow
+\left[
+\begin{array}{c}
+x\sim_{\sigma}x',
+\quad y\sim_{\sigma}y'
+\\[2pt]
+\Downarrow
+\\[2pt]
+x\oplus y\sim_{\sigma}x'\oplus y',
+\\
+x\star y\sim_{\sigma}x'\star y'
+\end{array}
+\right],
+\\
+&\left[
+\begin{array}{l}
+\forall x,x',y,y'\in\mathcal C:
+\\
+x\sim_{\sigma}x'\ \land\ y\sim_{\sigma}y'
+\\
+\qquad\Longrightarrow
+\bigl(y\preccurlyeq x
+\iff y'\preccurlyeq x'\bigr)
+\end{array}
+\right]
+\\*[-2pt]
+&\hspace{40pt}\Longrightarrow
+\left[
+x\sim_{\sigma}y\iff x=y
+\right].
+\end{align*}
+
+% Section 10 of 14
+\Needspace{7\baselineskip}
+\section*{Reindexing invariance}
+\begin{align*}
+&\pi:I\overset{\sim}{\longrightarrow}I,
+\qquad
+\rho_{\pi}:=\pi\circ\rho,
+\qquad
+\delta_{\pi}:=\delta\circ\pi^{-1},
+\\
+&\widehat\omega_{\pi}
+:=
+\pi\circ\widehat\omega
+\circ(\pi^{-1}\times\pi^{-1})
+\qquad
+(\omega\in\Omega_{\mathrm{alg}}),
+\\
+&\widehat Q_{\varepsilon,\pi}(a,b)
+:=
+\pi\!\left[
+\widehat Q_{\varepsilon}(\pi^{-1}(a),\pi^{-1}(b))
+\right],
+\\
+&\sigma_{I,\pi}:=\sigma_I\circ\pi^{-1},
+\\
+&0_{I,\pi}=\pi(0_I),
+\qquad
+u\in\mathcal U_T\Longrightarrow
+1_{I,\pi}=\pi(1_I),
+\\
+&\mathfrak O_I\cong_{\pi}\mathfrak O_{I,\pi}.
+\end{align*}
+
+% Section 11 of 14
+\Needspace{7\baselineskip}
+\section*{Finite monoid specialization}
+\begin{align*}
+&m:[d]\times[d]\longrightarrow[d],
+\qquad
+h\in[d],
+\\
+&\mathsf M_{m,h}(T)
+\iff
+\left\{
+\begin{aligned}
+&T_{ij}^{k}
+=
+\mathbf1_{\{m(i,j)=k\}}
+&&\forall i,j,k\in[d],
+\\
+&m(m(i,j),k)=m(i,m(j,k))
+&&\forall i,j,k\in[d],
+\\
+&m(h,i)=m(i,h)=i
+&&\forall i\in[d],
+\end{aligned}
+\right.
+\\
+&\mathsf M_{m,h}(T)
+\Longrightarrow
+M:=([d],m,h)\in\mathsf{Mon},
+\\
+&\mathsf M_{m,h}(T)
+\Longrightarrow
+(\mathcal C,\oplus,\star,\mathbf0,e_h)
+\cong
+\mathbb N_0[M],
+\\
+&\mathsf M_{m,h}(T)
+\Longrightarrow
+\mathcal U_T=\{e_h\},
+\qquad
+1_I=\rho(e_h)=d-h+1,
+\\
+&\mathsf M_{m,h}(T)
+\Longrightarrow
+\nu(x\star y)=\nu(x)\nu(y),
+\\
+&\mathsf M_{m,h}(T)
+\Longrightarrow
+\nu:\mathbb N_0[M]\longrightarrow\mathbb N_0
+\text{ is a unital semiring homomorphism},
+\\
+&\mathsf M_{m,h}(T)
+\Longrightarrow
+\nu_I(a\widehat\star b)=\nu_I(a)\nu_I(b),
+\\
+&\mathsf M_{m,h}(T)\land y\neq\mathbf0
+\\*[-2pt]
+&\hspace{20pt}\Longrightarrow
+Q_{\varepsilon}(x,y)
+\subseteq
+\{q\in\mathcal C:\nu(q)\nu(y)=\nu(x)\},
+\\
+&\mathsf M_{m,h}(T)\land y\neq\mathbf0
+\land \nu(y)\nmid\nu(x)
+\\*[-2pt]
+&\hspace{20pt}\Longrightarrow
+Q_{\varepsilon}(x,y)=\varnothing,
+\\
+&\mathsf M_{m,h}(T)\land y\neq\mathbf0
+\land N:=\frac{\nu(x)}{\nu(y)}\in\mathbb N_0
+\\*[-2pt]
+&\hspace{20pt}\Longrightarrow
+|Q_{\varepsilon}(x,y)|
+\leq
+\binom{N+d-1}{d-1}<\infty,
+\\
+&\mathsf M_{m,h}(T)\land y\neq\mathbf0
+\Longrightarrow
+Q_{\varepsilon}(\mathbf0,y)=\{\mathbf0\}.
+\end{align*}
+
+% Section 12 of 14
+\Needspace{7\baselineskip}
+\section*{Admissibility restriction}
+\begin{align*}
+&\mathbf0\in D\subseteq\mathcal C,
+\qquad
+\omega\in\{\oplus,\star,\ominus\},
+\\
+&\operatorname{dom}(\omega_D)
+:=
+\left\{
+(x,y)\in D^2:
+\begin{array}{l}
+(x,y)\in\operatorname{dom}(\omega),\\
+\omega(x,y)\in D
+\end{array}
+\right\},
+\\
+&\omega_D(x,y):=\omega(x,y)
+\qquad
+\bigl((x,y)\in\operatorname{dom}(\omega_D)\bigr),
+\\
+&Q_{\varepsilon,D}(x,y)
+:=
+Q_{\varepsilon}(x,y)\cap D,
+\qquad
+(x,y)\in D^2,
+\\
+&\rho_D(x)
+:=
+|\{y\in D:y\prec x\}|,
+\\
+&I_D:=\rho_D[D]
+=
+\begin{cases}
+\{0,\ldots,|D|-1\},&|D|<\infty,\\
+\mathbb N_0,&|D|=\aleph_0,
+\end{cases}
+\\
+&\delta_D:=\rho_D^{-1},
+\qquad
+\sigma_D:=\sigma|_D,
+\\
+&\operatorname{dom}(\oplus_D)=D^2
+\iff
+\oplus[D^2]\subseteq D,
+\\
+&\operatorname{dom}(\star_D)=D^2
+\iff
+\star[D^2]\subseteq D,
+\\
+&\widehat\omega_D
+:=
+\rho_D\circ\omega_D\circ(\delta_D\times\delta_D),
+\\
+&\widehat Q_{\varepsilon,D}(a,b)
+:=
+\rho_D\!\left[
+Q_{\varepsilon,D}(\delta_D(a),\delta_D(b))
+\right].
+\end{align*}
+
+% Section 13 of 14
+\Needspace{7\baselineskip}
+\section*{Signed extension}
+\begin{align*}
+&\mathcal C^{\pm}:=\mathbb Z^d
+\cong
+\operatorname{Gr}(\mathcal C,\oplus),
+\\
+&(x,y)\sim_{\mathrm{Gr}}(x',y')
+\iff
+x\oplus y'=x'\oplus y,
+\\
+&(\mathcal C\times\mathcal C)/{\sim_{\mathrm{Gr}}}
+\longrightarrow
+\mathbb Z^d,
+\qquad
+[(x,y)]\longmapsto x-y,
+\\
+&(z\oplus_{\pm}w)_k:=z_k+w_k,
+\qquad
+(z\ominus_{\pm}w)_k:=z_k-w_k,
+\\
+&(z\star_{\pm}w)_k
+:=
+\sum_{i=1}^{d}\sum_{j=1}^{d}
+z_iw_jT_{ij}^{k},
+\\
+&\ominus_{\pm}:
+(\mathcal C^{\pm})^2\longrightarrow\mathcal C^{\pm},
+\\
+&Q_{\mathrm R}^{\pm}(z,w)
+:=
+\{q\in\mathbb Z^d:q\star_{\pm}w=z\},
+\\
+&Q_{\mathrm L}^{\pm}(z,w)
+:=
+\{q\in\mathbb Z^d:w\star_{\pm}q=z\},
+\\
+&\|z\|_1:=\sum_{i=1}^{d}|z_i|,
+\\
+&z\prec_{\pm}w
+\iff
+\|z\|_1<\|w\|_1
+\\*[-2pt]
+&\hspace{71pt}\lor
+\left(
+\|z\|_1=\|w\|_1
+\ \land\
+z<_{\mathrm{lex}}w
+\right),
+\\
+&\rho_{\pm}(z)
+:=
+|\{w\in\mathbb Z^d:w\prec_{\pm}z\}|,
+\\
+&\rho_{\pm}:\mathbb Z^d
+\overset{\sim}{\longrightarrow}\mathbb N_0,
+\qquad
+\delta_{\pm}:=\rho_{\pm}^{-1},
+\\
+&\mathsf A_T\land u\in\mathcal U_T
+\\*[-2pt]
+&\hspace{20pt}\Longrightarrow
+(\mathbb Z^d,\oplus_{\pm},\star_{\pm},\mathbf0,u)
+\in\mathsf{Ring}_1,
+\\
+&\mathsf M_{m,h}(T)
+\\*[-2pt]
+&\hspace{20pt}\Longrightarrow
+(\mathbb Z^d,\oplus_{\pm},\star_{\pm},\mathbf0,e_h)
+\cong
+\mathbb Z[M].
+\end{align*}
+
+% Section 14 of 14
+\Needspace{7\baselineskip}
+\section*{Neutral–toggle instance}
+\begin{align*}
+&d=2,
+\qquad
+o_1=\mathrm{neutral},
+\qquad
+o_2=\mathrm{toggle},
+\\
+&T_{11}^{1}=T_{12}^{2}=T_{21}^{2}=T_{22}^{1}=1,
+\\
+&T_{ij}^{k}=0
+\quad
+\text{for all remaining }(i,j,k),
+\\
+&(p,q)\star(r,s)
+=
+(pr+qs,\ ps+qr),
+\\
+&\rho(p,q)
+=
+\binom{p+q+1}{2}+p,
+\\
+&\begin{array}{c|cccccc}
+a&0&1&2&3&4&5\\ \hline
+\delta(a)&(0,0)&(0,1)&(1,0)&(0,2)&(1,1)&(2,0)
+\end{array}
+\\
+&1\widehat{\oplus}2=4,
+\qquad
+4\widehat{\ominus}1=2,
+\qquad
+1\widehat{\star}1=2,
+\\
+&\widehat Q_{\mathrm R}(4,4)
+=
+\widehat Q_{\mathrm L}(4,4)
+=
+\{1,2\},
+\\
+&Q_{\mathrm R}\bigl((1,1),(1,1)\bigr)
+=
+\{(0,1),(1,0)\},
+\\
+&Q_{\mathrm R}^{\pm}\bigl((1,1),(1,1)\bigr)
+=
+\{(t,1-t):t\in\mathbb Z\}.
+\end{align*}
+
+\end{document}

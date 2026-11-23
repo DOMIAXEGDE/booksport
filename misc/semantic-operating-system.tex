@@ -1,0 +1,379 @@
+% Semantic Operating System. Place this master beside the three original inputs.
+% Compile with Tectonic or XeLaTeX. The PDF includes each source as read at build time.
+% The distributed sos.pdf is the compiled master under the requested publication name.
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[a4paper,left=23mm,right=23mm,top=23mm,bottom=22mm,headheight=15pt,headsep=6mm,footskip=10mm]{geometry}
+\usepackage{xcolor,booktabs,array,fancyhdr}
+% Master preamble dependencies, alongside the existing page/header layout.
+\usepackage{mathtools,amssymb,mathrsfs,needspace,docmute}
+% input file is standalone; docmute skips its private preamble.
+% XeTeX with legacy T1 fonts requires a TeX en-dash for this Unicode input.
+\ifdefined\XeTeXversion
+\begingroup
+\lccode`\~="2013
+\lowercase{\endgroup
+  \newcommand{\OcaInputDash}{\catcode"2013=\active\def~{\textendash}}}
+\fi
+\newcommand{\RenderOriginalAlgebra}[1]{%
+  \begingroup
+  \ifdefined\XeTeXversion\OcaInputDash\fi
+  \allowdisplaybreaks[2]%
+  \setlength{\jot}{4pt}%
+  \setlength{\parindent}{0pt}%
+  \setlength{\parskip}{4pt}%
+  \raggedright
+  \renewcommand{\href}[2]{##2}%
+  \setcounter{soslaw}{0}%
+  \RenewDocumentCommand{\section}{sm}{\stepcounter{soslaw}\manualtarget{law-\arabic{soslaw}}\subsection*{##2}}%
+  \input{#1}%
+  \par\endgroup}
+% Numbered source editions. Requires hyperref and xcolor.
+\definecolor{SosListNumber}{HTML}{526770}
+\definecolor{SosListFence}{HTML}{A6B9BE}
+\ExplSyntaxOn
+\ior_new:N \l__sos_source_ior
+\int_new:N \l__sos_line_int
+\bool_new:N \l__sos_fence_bool
+\bool_new:N \l__sos_code_bool
+\str_new:N \l__sos_key_str
+\tl_new:N \l__sos_line_tl
+\seq_new:N \l__sos_bold_seq
+\seq_new:N \l__sos_italic_seq
+\cs_generate_variant:Nn \seq_set_split_keep_spaces:Nnn { NnV }
+
+% Legacy T1 fonts take typographic punctuation through their text commands.
+\cs_new_protected:Npn \__sos_glyph:n #1
+  {
+    \int_case:nnF { `#1 }
+      { {8211}{\textendash} {8217}{\textquoteright} }
+      {#1}
+  }
+
+% Retain indentation and allow a long literal to wrap on the same numbered row.
+\cs_new_protected:Npn \__sos_code:n #1
+  {
+    \str_map_inline:nn {#1}
+      {
+        \int_case:nnF { `##1 }
+          {
+            {9}{ \hskip 4\fontdimen2\font\relax }
+            {32}{ \penalty 0\relax \hskip \fontdimen2\font\relax }
+          }
+          { \__sos_glyph:n {##1} \penalty 900\relax }
+      }
+  }
+
+% Prose uses word spacing, with extra breakpoints in the original URLs.
+\cs_new_protected:Npn \__sos_prose:n #1
+  {
+    \str_map_inline:nn {#1}
+      {
+        \__sos_glyph:n {##1}
+        \int_case:nn { `##1 }
+          {
+            {47}{\penalty 100\relax}
+            {45}{\penalty 100\relax}
+            {95}{\penalty 100\relax}
+            {46}{\penalty 100\relax}
+          }
+      }
+  }
+\cs_new_protected:Npn \__sos_emphasis:n #1
+  {
+    \seq_set_split_keep_spaces:Nnn \l__sos_italic_seq {*} {#1}
+    \seq_map_indexed_inline:Nn \l__sos_italic_seq
+      {
+        \int_if_even:nTF {##1}
+          { {\itshape \__sos_prose:n {##2}} }
+          { \__sos_prose:n {##2} }
+      }
+  }
+\cs_new_protected:Npn \__sos_markdown:n #1
+  {
+    \regex_match:nnTF { \A \x{23}+ \s } {#1}
+      {
+        \tl_set:Nn \l__sos_line_tl {#1}
+        \regex_replace_once:nnN { \A \x{23}+ \s+ } {} \l__sos_line_tl
+        \sffamily\bfseries \exp_args:NV \__sos_prose:n \l__sos_line_tl
+      }
+      {
+        \tl_set:Nn \l__sos_line_tl {#1}
+        % Print the cited authors and titles from Markdown links.
+        \regex_replace_all:nnN { \[ ([^\]]+) \] \( https?:// [^)]+ \) } { \1 } \l__sos_line_tl
+        \seq_set_split_keep_spaces:NnV \l__sos_bold_seq {**} \l__sos_line_tl
+        \seq_map_indexed_inline:Nn \l__sos_bold_seq
+          {
+            \int_if_even:nTF {##1}
+              { {\bfseries \__sos_emphasis:n {##2}} }
+              { \__sos_emphasis:n {##2} }
+          }
+      }
+  }
+\cs_new_protected:Npn \__sos_linenumber:
+  {
+    \hbox to 6.5mm
+      {
+        \hfil
+        \hypertarget{\str_use:N\l__sos_key_str-\int_use:N\l__sos_line_int}
+          {
+            {\sffamily\fontsize{7}{7}\selectfont\color{SosListNumber}
+             \int_use:N\l__sos_line_int}
+          }
+      }
+    \kern 1.3mm
+    \bool_if:NTF \l__sos_fence_bool
+      { {\color{SosListFence}\vrule width .45pt} }
+      { \kern .45pt }
+    \kern 1.7mm
+  }
+\cs_new_protected:Npn \__sos_source_row:n #1
+  {
+    \int_incr:N \l__sos_line_int
+    \bool_set_true:N \l__sos_code_bool
+    \str_if_eq:VnT \l__sos_key_str {M}
+      {
+        \str_if_eq:nnTF {#1} {```}
+          { \bool_set_inverse:N \l__sos_fence_bool }
+          { \bool_set_eq:NN \l__sos_code_bool \l__sos_fence_bool }
+      }
+    \par\nointerlineskip
+    \hbox to \linewidth
+      {
+        \__sos_linenumber:
+        \tl_if_blank:nTF {#1}
+          { \vrule width 0pt height 5.5pt depth 1.5pt\hfil }
+          {
+            \vtop
+              {
+                \hsize=\dimexpr\linewidth-9.5mm-.45pt\relax
+                \parindent=0pt\relax
+                \raggedright\hyphenpenalty=200\relax
+                \noindent
+                \bool_if:NTF \l__sos_code_bool
+                  {
+                    \ttfamily\fontsize{8.4}{10.5}\selectfont
+                    \strut \__sos_code:n {#1}\strut
+                  }
+                  {
+                    \normalfont\fontsize{10}{12.3}\selectfont
+                    \strut \__sos_markdown:n {#1}\strut
+                  }
+                \par
+              }\hfil
+          }
+      }
+    \penalty 0\relax
+  }
+\NewDocumentCommand{\OriginalListing}{mm}
+  {
+    \group_begin:
+      \par\str_set:Nn \l__sos_key_str {#1}
+      \int_zero:N \l__sos_line_int
+      \bool_set_false:N \l__sos_fence_bool
+      \ior_open:Nn \l__sos_source_ior {#2}
+      \ior_str_map_inline:Nn \l__sos_source_ior { \__sos_source_row:n {##1} }
+      \ior_close:N \l__sos_source_ior
+      \iow_term:x { Source~#1:~\int_use:N\l__sos_line_int\space physical~lines }
+    \group_end:
+  }
+\ExplSyntaxOff
+\usepackage[unicode,bookmarksnumbered=false,colorlinks=true,linkcolor=tealref,urlcolor=tealref]{hyperref}
+\definecolor{tealref}{HTML}{155B61}
+\definecolor{ink}{HTML}{192C37}
+\definecolor{quiet}{HTML}{465D66}
+\definecolor{rulegray}{HTML}{B8C8C8}
+\hypersetup{pdftitle={Semantic Operating System},pdfsubject={Structure-substrate names, Object Counting Algebra and observer-dependent descriptions}}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4.5pt plus 1pt}
+\setlength{\emergencystretch}{2em}
+\raggedbottom
+\newcommand{\EditionPart}{Formal discussion}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\sffamily\small\color{quiet}Semantic Operating System}
+\fancyhead[R]{\sffamily\small\color{quiet}\EditionPart}
+\fancyfoot[L]{\sffamily\footnotesize\color{quiet}\ifdefined\SosManualEdition\hyperlink{start}{Start}\quad\hyperlink{dictionary}{Dictionary}\quad\hyperlink{index}{Index}\else\hyperlink{guide}{Reading guide}\fi}
+\fancyfoot[R]{\sffamily\small\color{ink}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+\newcommand{\kicker}[1]{{\sffamily\bfseries\small\color{tealref}#1\par}}
+\newcommand{\edtitle}[1]{{\sffamily\bfseries\fontsize{24}{27}\selectfont\color{ink}#1\par}}
+\newcommand{\spread}[2]{\clearpage\renewcommand{\EditionPart}{#1}\kicker{Formal discussion \enspace/\enspace #1}\edtitle{#2}\vspace{2mm}}
+\newcounter{soslaw}
+\newcommand{\manualtarget}[1]{\hypertarget{#1}{}\label{loc-#1}}
+\newcommand{\manualpage}[1]{\hyperlink{#1}{\pageref*{loc-#1}}}
+\newcommand{\appendixpart}[3]{\clearpage\renewcommand{\EditionPart}{#2}\pdfbookmark[1]{#2}{bm#1}\manualtarget{#1}\kicker{#3}}
+\newcommand{\soschapter}[4]{\clearpage\renewcommand{\EditionPart}{#2}\pdfbookmark[1]{#4}{bm#1}\manualtarget{#1}\kicker{#3}\edtitle{#4}\smallskip}
+\newcommand{\sosterm}[3]{\par\Needspace{2\baselineskip}\manualtarget{#1}\textbf{#2.}\enspace #3\par}
+\newcounter{question}
+\newcommand{\question}[2]{\refstepcounter{question}\par\addvspace{4mm}\manualtarget{q\thequestion}\pdfbookmark[2]{\thequestion. #1}{bmq\thequestion}%
+  {\sffamily\bfseries\color{tealref}Question \thequestion\enspace\textcolor{rulegray}{/}\enspace #1\par}%
+  {\large\bfseries\color{ink}#2\par}\nobreak}
+\newcommand{\ans}{\noindent{\sffamily\bfseries\small\color{tealref}Answer \thequestion.}\enspace\ignorespaces}
+\newcommand{\linesref}[3]{\hyperlink{#1-#2}{#1\,#2--#3}}
+\newcommand{\lineref}[2]{\hyperlink{#1-#2}{#1\,#2}}
+\newcommand{\sources}[1]{\par\nobreak{\raggedright\sffamily\footnotesize\color{quiet}Source lines\enspace #1\par}}
+\newcommand{\pairlink}[2]{\hyperlink{q#1}{#2}}
+\newcommand{\N}{\mathbb N_0}
+\newcommand{\Cspace}{\mathcal C}
+\newcommand{\Name}{\mathsf{Name}}
+\newcommand{\Boolean}{\mathbb B}
+\begin{document}
+\color{ink}
+\ifdefined\SosManualEdition
+\hypersetup{pdftitle={Semantic Operating System: Operational Manual, v2},pdfsubject={An operational guide with algorithms, terminology, equations and line-numbered sources}}
+\manualtarget{start}\pdfbookmark[0]{Semantic Operating System: Operational Manual}{bmstart}
+\renewcommand{\EditionPart}{Operational manual}
+\kicker{Operational manual \enspace/\enspace Version 2}
+\edtitle{Semantic Operating System}
+{\large How to store a named structure, read it from an observer's point of origin, and calculate with its cells\par}
+\medskip
+\textbf{A first run.} Use two primitive types, neutral and toggle, in that order. Give a record the name \texttt{lamp}, shape $(1,1)$ and cell value $(1,1)$. Those last two numbers say the cell contains one occurrence of each type. Shape and content happen to have the same numbers here. They have different roles.
+
+\begin{tabular}{@{}p{.29\linewidth}p{.63\linewidth}@{}}
+\toprule
+\textbf{Action} & \textbf{Expected observation}\\
+\midrule
+Register the record & The name \texttt{lamp} resolves to one occupied position.\\
+Call with completion $0$ & The returned pair is $(\texttt{lamp},1)$. The second field asks for more detail.\\
+Read the sole cell & A detailed observer sees $(1,1)$. A size observer sees $2$. The cell's natural canonical address is $4$.\\
+Divide the cell by itself & Both singleton types reconstruct it. The exact quotient addresses are $\{1,2\}$.\\
+\bottomrule
+\end{tabular}
+
+\textbf{Follow the operation.} The formal discussion explains why these values differ. Five implementations give the steps for reproducing them with other names, shapes and algebra profiles. Click a topic or use the printed page number.
+\begin{center}\small
+\begin{tabular}{@{}p{.65\linewidth}r@{}}
+\toprule
+\textbf{Where to go} & \textbf{Page}\\
+\midrule
+\hyperlink{guide}{Twelve questions and answers} & \manualpage{guide}\\
+\hyperlink{implementations}{Implementations and worked traces} & \manualpage{implementations}\\
+\hyperlink{dictionary}{Key terminology and notation} & \manualpage{dictionary}\\
+\hyperlink{equations}{The fourteen sections of Object Counting Algebra} & \manualpage{equations}\\
+\hyperlink{draft}{Operating-system draft, numbered source D} & \manualpage{draft}\\
+\hyperlink{discussed}{oca-discussion, numbered source M} & \manualpage{discussed}\\
+\hyperlink{texlisting}{OCA formulation, numbered source T} & \manualpage{texlisting}\\
+\hyperlink{index}{Alphabetical subject index} & \manualpage{index}\\
+\bottomrule
+\end{tabular}
+\end{center}
+\clearpage\renewcommand{\EditionPart}{Formal discussion}
+\fi
+\manualtarget{guide}\pdfbookmark[1]{Reading guide and formal discussion}{bmguide}
+\kicker{Formal specification \enspace/\enspace 22 November 2026}
+\ifdefined\SosManualEdition\edtitle{The formal discussion}\else\edtitle{Semantic Operating System}\fi
+{\large A discussion of named structures, observer views and Object Counting Algebra\par}
+\vspace{2mm}
+\textbf{Reading guide.} The twelve answers define a mathematical interface for the draft. A choice introduced to make that interface usable is identified where it first matters. The same two primitive objects, \emph{neutral} and \emph{toggle}, recur from the first record to the final call.
+\par{\small\sffamily
+\hyperlink{draft}{D\enspace Operating-system draft}\quad
+\hyperlink{discussed}{M\enspace oca-discussion}\quad
+\hyperlink{texlisting}{T\enspace OCA formulation}\\
+Each source citation opens its numbered line. The \hyperlink{equations}{typeset algebra} preserves the fourteen original mathematical sections.\par}
+\smallskip\hrule height .3pt
+\question{The record}{What does a structure-substrate name identify?}
+\ans It identifies a record whose detail an observer can query. To give the draft's $n$ dimensions a precise meaning, take a record $R=(s,\lambda,h,B)$. Here $s$ is its exact text name, $\lambda$ is a fixed text key for the algebra used by its cells, and $h=(h_1,\ldots,h_n)$ gives its extents, with $n\geq1$ and $h_j\in\N$. The body $B$ assigns one configuration in $\Cspace_\lambda$ to each coordinate in $\prod_{j=1}^{n}\{0,\ldots,h_j-1\}$. A zero extent gives an empty body with a known shape. A valid coordinate may instead contain the empty configuration. For example, the record named \texttt{lamp} can have shape $(1,1)$ and contain one neutral and one toggle in its sole cell. The counts, the cell coordinate and the record name answer three different lookup questions.
+\sources{\lineref{D}{2}, \lineref{D}{5}\quad\linesref{T}{73}{120}\quad\linesref{M}{318}{336}}
+\question{Reversible text}{How can the name or the entire record travel as one integer?}
+\ans Fix text to finite sequences of Unicode scalar values, with exact equality. This edition adopts UTF-8 and preserves spelling, order and whitespace. For a text $s$, prefix its bytes with byte \texttt{01} and read the result as an unsigned big-endian integer $E(s)$. To invert, write the integer in its shortest big-endian form, check and remove the prefix, and decode valid UTF-8. Reject values outside the image. The empty text maps to $1$, and a single zero byte maps to $256$. The names \texttt{ab} and \texttt{ba} receive different codes even though counting their letters would give the same multiset.
+
+For a whole record, frame each text field by its UTF-8 byte length in decimal, a hash sign, then the field itself. Concatenate frames for $s,\lambda,n$, the $n$ extents, then each cell's multiplicities in alphabet order, visiting cells in row-major order (last axis fastest). Use decimal integers with no leading zeros except $0$ itself. A negative coefficient in the signed profile uses an ASCII minus followed by its positive magnitude. Reject signed zero. Apply $E$ to the resulting text. A decoder uses the fixed profile $\lambda$ to determine the count of fields per cell, verifies lengths and shape, and rejects missing or trailing fields. This defines a reversible record code even when a name contains a hash sign.
+\sources{\lineref{D}{2}\quad\linesref{M}{662}{678}, \linesref{M}{726}{746}}
+\spread{Configuration and rank}{Counting a cell}
+\question{The counting domain}{Once the record is found, what does a cell's canonical number identify?}
+\ans Fix the finite, nonempty alphabet $A=(o_1,\ldots,o_d)$ in namespace $\lambda$. Its natural configuration space is $\Cspace=\N^d$. Coordinate $x_i$ counts occurrences of $o_i$, the zero vector is the empty multiset, and $\nu(x)=\sum_i x_i$ counts all occurrences. Two configurations are equal exactly when every corresponding count agrees. A record can move in the registry without changing any of these values.
+
+Order the entire space by increasing $\nu$ and then by ascending lexicographic order on $(x_1,\ldots,x_d)$. The rank $\rho(x)$ counts the configurations preceding $x$. Each cardinality level is finite, so the ranks start at zero, are consecutive, and have an inverse $\delta$. With neutral first and toggle second, the first six addresses are
+\[
+\begin{array}{c|rrrrrr}
+a&0&1&2&3&4&5\\ \hline
+\delta(a)&(0,0)&(0,1)&(1,0)&(0,2)&(1,1)&(2,0).
+\end{array}
+\]
+The \texttt{lamp} cell has two occurrences and address $4$, even if it is the first entry registered. An OCA address requires its namespace. The integer encoding of \texttt{lamp} in Answer~2 requires its text codec.
+\sources{\linesref{T}{73}{120}, \linesref{T}{125}{185}, \linesref{T}{889}{916}\quad\linesref{M}{680}{704}, \linesref{M}{714}{746}}
+\question{Aggregation and removal}{Given two cell addresses, when can the system remove what it added?}
+\ans Decode both addresses using $\delta$. Aggregation adds corresponding counts, $(x\oplus y)_k=x_k+y_k$. It is total, associative and commutative, has zero as its identity, and admits cancellation. Exact removal $x\ominus y$ is defined precisely when $y_k\leq x_k$ for every $k$. Its result is the unique $z$ for which $z\oplus y=x$. Encode a successful result with $\rho$.
+
+Adding addresses $1$ and $2$ therefore gives address $4$. Removing the toggle at address $1$ from $4$ recovers address $2$. Attempting to remove that toggle from address $2$ fails because $(1,0)$ contains zero toggles. Removing a toggle from itself succeeds with the empty vector, address $0$. These are operations on specified cells. They leave the record name, its shape and the registry untouched. Further storage effects would need a separate write operation.
+\sources{\linesref{T}{190}{242}, \linesref{T}{247}{278}, \linesref{T}{433}{476}\quad\linesref{M}{362}{404}, \linesref{M}{568}{574}}
+\spread{Composition and division}{Reconstructing a configuration}
+\question{Composition}{How does the system know what two primitive objects produce together?}
+\ans The algebra profile supplies $T_{ij}^{k}\in\N$, the number of occurrences of type $k$ produced by the ordered primitive pair $(i,j)$. For each such pair, $x_i y_j$ counts its interactions. Summing their contributions defines the output
+\[
+                 (x\star y)_k=\sum_{i=1}^{d}\sum_{j=1}^{d}x_i y_j T_{ij}^{k}.
+\]
+This distributes over aggregation on both sides and makes zero absorbing. Associativity requires agreement on the two groupings of every primitive triple. Commutativity requires $T_{ij}^{k}=T_{ji}^{k}$ for every $i,j,k$. A two-sided unit must reproduce each basis configuration on both sides. If each pair produces one primitive and the table forms a finite monoid with identity, its identity singleton is the unit, cardinalities multiply, and the configuration algebra is the nonnegative monoid semiring.
+
+In the running instance neutral acts as identity and two toggles compose to neutral. The product of two address-$1$ operands is therefore address $2$. A profile that leaves even one ordered primitive pair unspecified does not determine this operation on all cells.
+\sources{\linesref{T}{190}{214}, \linesref{T}{247}{300}, \linesref{T}{305}{372}, \linesref{T}{673}{748}\quad\linesref{M}{406}{450}, \linesref{M}{560}{574}}
+\question{Exact division}{If the product and one factor are known, what must an answer contain?}
+\ans Every admissible factor that reconstructs the product. With divisor $y$ on the right, $Q_{\rm R}(x,y)=\{q:q\star y=x\}$. With $y$ on the left, $Q_{\rm L}(x,y)=\{q:y\star q=x\}$. For each side the condition is a linear system $M(y)q=x$ over nonnegative integers. A consistent system with a zero column has infinitely many solutions because its corresponding coordinate is free. Otherwise a nonempty fiber is finite because each coordinate contributes a positive amount to a fixed total.
+
+Return the encoded set as $\mathsf{Sol}(\rho[Q])$. For \texttt{lamp}, dividing $(1,1)$ by $(1,1)$ on either side requires $q_1+q_2=1$. Neutral and toggle both work, so the result is $\mathsf{Sol}(\{1,2\})$. A nonzero dividend divided by zero gives $\mathsf{Sol}(\varnothing)$, while zero divided by zero gives $\mathsf{Sol}(\N)$ in the natural namespace. A symbolic set can denote the latter exactly. The evaluator distinguishes a scalar $\mathsf{Val}(0)$, $\mathsf{Sol}(\{0\})$, $\mathsf{Sol}(\varnothing)$ and a failed residual $\mathsf{Fail}$.
+\sources{\linesref{T}{231}{242}, \linesref{T}{377}{428}, \linesref{T}{481}{534}, \linesref{T}{917}{934}\quad\linesref{M}{452}{480}, \linesref{M}{574}{580}}
+\spread{Interpretation and namespaces}{Changing what an observer sees}
+\question{Observer origin}{What detail may differ between observers of the same named substrate?}
+\ans Give each origin $o$ a declared view $V_o$. In this edition it retains the record's name and shape and applies a map $\sigma_o:\Cspace_\lambda\to S_o$ to each cell. A request for \texttt{lamp} can return the pair $(1,1)$ to a type-counting observer and the integer $2$ to an observer who sees only cardinality. Both read the same cell. An observation has its own representation and need not let the observer recover the complete record. Reversible serialization in Answer~2 applies to the chosen record or text.
+
+To compute algebraically on meanings, specify $0_o,\oplus_o,\star_o$ and require $\sigma_o(0)=0_o$, $\sigma_o(x\oplus y)=\sigma_o(x)\oplus_o\sigma_o(y)$ and $\sigma_o(x\star y)=\sigma_o(x)\star_o\sigma_o(y)$. Then every exact factor maps to a semantic factor on the same side, though a semantic solution may lack a corresponding exact factor. Cardinality makes singleton neutral and singleton toggle indistinguishable. Removing a toggle from the latter succeeds, while removing it from the former fails. Consequently an observer who retains only total size cannot decide exact removal from that view.
+\sources{\lineref{D}{2}\quad\linesref{T}{539}{599}, \linesref{T}{601}{635}\quad\linesref{M}{506}{534}, \linesref{M}{748}{762}}
+\question{Changes of domain}{What survives relabeling, restriction, or the admission of negative counts?}
+\ans A bijection $\pi$ on the address space relabels the same configuration by $\pi(\rho(x))$. Transport the decoder, operations, quotient sets and interpretation through the same bijection and each reconstruction still holds. Keep the namespace with each stored address.
+
+Restricting to $D\subseteq\Cspace$ containing zero changes which configurations exist for that profile. Rank within $D$, accept a scalar operation only if its result remains in $D$, and intersect each quotient set with $D$. For $D=\{(0,0),(1,1)\}$ the mixed cell has restricted rank $1$ and adding it to itself has no admitted result. In the full namespace the same cell has rank $4$.
+
+The signed extension has domain $\mathbb Z^d$, total coordinatewise subtraction and its own order by $\ell^1$ norm followed by lexicographic order. In that profile the mixed-cell division of Answer~6 admits every $(t,1-t)$ for $t\in\mathbb Z$. The nonnegative profile admits exactly two of them. A caller must select the domain before interpreting the addresses or comparing answers.
+\sources{\linesref{T}{640}{668}, \linesref{T}{753}{810}, \linesref{T}{815}{884}, \linesref{T}{922}{934}\quad\linesref{M}{536}{556}, \linesref{M}{726}{746}}
+\spread{Lookup and completion}{Reading the operating-system draft}
+\question{Registry lookup}{How does a name reach an array cell without becoming its array index?}
+\ans The draft asks for an $n$-dimensional store indexed by name. Supply a finite registry grid $G$ with declared extents, a partial injective index $L:\Name\rightharpoonup G$, and a partial array $P:G\rightharpoonup\mathsf{Record}$. Require $\operatorname{im}L=\operatorname{dom}P$ and $P(L(s)).\mathrm{name}=s$ for every stored name. Together these conditions give each registered name one occupied position and every occupied position one name. $P$ stores records, each with its own inner shape from Answer~1. The depth of that inner array and the rank of the registry grid are independent parameters in this edition.
+
+For an exact, nonempty name $s$, lookup reads $P(L(s))$ if $s\in\operatorname{dom}L$ and reports \textsf{UnknownName} otherwise. The empty text has a codec value but is inadmissible as a registry name in this profile. A duplicate name or occupied coordinate is invalid when preparing the registry. Movement to another free coordinate preserves lookup if the index and array change together. All queries below use one fixed, valid snapshot. The draft specifies neither a registration algorithm nor a persistence or concurrency protocol.
+\sources{\linesref{D}{2}{9}\quad\linesref{M}{662}{678}, \linesref{M}{714}{746}}
+\question{Completion and learning}{What does the written status function return for the draft's two Boolean cases?}
+\ans The first test accepts $1$ and assigns $0$ to \texttt{learn}. The second test repeats the same condition after the first one has failed, so its assignment of $1$ is unreachable. With input $0$ the return statement supplies no defined value for \texttt{learn}. For a total interface this edition adopts the complementary second case. Interpret \texttt{learn} as a request for further detail and \texttt{complete} as the caller's declaration.
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Input \texttt{complete} & Literal draft result & Adopted \texttt{status\_ping} result\\
+\midrule
+$0$ (incomplete) & no value specified & $1$ (request further detail)\\
+$1$ (complete) & $0$ & $0$ (no request)\\
+\bottomrule
+\end{tabular}
+\end{center}
+For Boolean input $c\in\{0,1\}$ the adopted rule is $\operatorname{status\_ping}(c)=1-c$. Out-of-domain input is rejected at the interface. Calling this function computes a flag. It does not inspect a record, infer its completeness from the observer, or start a learning process.
+\sources{\linesref{D}{13}{27}, \linesref{D}{29}{33}}
+\spread{Interface and trace}{Following a call to its result}
+\question{The return contract}{How do lookup and status compose in \texttt{structure\_substrate}?}
+\ans The draft places a name and a status call in its return expression. This edition makes those two fields an ordered result. For a well-formed name $s$ and Boolean $c$ in a valid snapshot, resolve $s$ with Answer~9. On success return $(s,\operatorname{status\_ping}(c))$. On an absent name return \textsf{UnknownName}. Reject malformed text, an empty name or a non-Boolean flag as \textsf{InvalidInput} before lookup. A successful call preserves both the stored body and the caller's original name. Asking for observer-specific detail is a separate read of the resolved record through $V_o$.
+
+The placeholders, \texttt{elif}, and undeclared \texttt{learn} in the draft are pseudocode. In C++ a built-in comma expression evaluates to its right operand, so a direct translation of line~9 would lose the name. A typed pair or a record with fields \texttt{name} and \texttt{learn} implements the declared result. Its text field owns its value in this interface. The profile specifies a mathematical read with no side effects or storage writes.
+\sources{\linesref{D}{5}{11}, \linesref{D}{13}{25}\quad\linesref{M}{662}{678}}
+\question{An end-to-end trace}{What happens when the draft's entry point asks about \texttt{lamp}?}
+\ans Line~31 supplies input $0$. Bind its name placeholder to \texttt{lamp} and prepopulate a registry position with the one-cell record of Answer~1. In the literal draft the function reaches its return with an undefined status. Under the adopted contract, lookup finds \texttt{lamp}, the ping returns $1$, and the variable \texttt{x1} receives $(\texttt{lamp},1)$. The \texttt{return 0} in \texttt{main} is a separate process result. The draft contains no print operation.
+
+A second call on the same snapshot with input $1$ yields $(\texttt{lamp},0)$. Both calls leave the cell at natural address $4$. A subsequent detailed observation recovers $(1,1)$, its size view returns $2$, and dividing that cell by itself returns the two addresses $\{1,2\}$. Removing the name from the example snapshot would instead yield \textsf{UnknownName} at lookup. These predictions distinguish lookup, learning status, observer detail and algebraic results well enough to check each independently.
+\sources{\linesref{D}{29}{35}, \linesref{D}{13}{25}\quad\linesref{T}{889}{934}\quad\linesref{M}{558}{580}}
+\ifdefined\SosManualEdition
+\input{sos-implementations.tex}
+\input{key-terminology-dictionary.tex}
+\fi
+\appendixpart{equations}{Typeset algebra}{Original formulation \enspace/\enspace T}
+\RenderOriginalAlgebra{oca-defined.tex}
+\appendixpart{draft}{Operating-system draft}{Numbered original \enspace/\enspace D}
+\edtitle{Operating-system draft}
+{\sffamily\small\texttt{semantic-operating-system-draft.txt}\par}\smallskip
+\OriginalListing{D}{semantic-operating-system-draft.txt}
+\appendixpart{discussed}{oca-discussion}{Numbered original \enspace/\enspace M}
+\edtitle{oca-discussion}
+{\sffamily\small\texttt{oca-discussed.md}\par}\smallskip
+\OriginalListing{M}{oca-discussed.md}
+\appendixpart{texlisting}{OCA formulation source}{Numbered original \enspace/\enspace T}
+\edtitle{Object Counting Algebra formulation}
+{\sffamily\small\texttt{oca-defined.tex}\par}\smallskip
+\OriginalListing{T}{oca-defined.tex}
+\ifdefined\SosManualEdition\input{index.tex}\fi
+\end{document}

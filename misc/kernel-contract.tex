@@ -1,0 +1,200 @@
+% Standalone publication, or a preamble module when SOSLoadContractRules is set.
+\ifdefined\SOSLoadContractRules\else
+  \documentclass[11pt,a4paper]{article}
+\fi
+\ExplSyntaxOn
+\prop_new:N \g__sos_service_kind_prop
+\prop_new:N \g__sos_service_uses_prop
+\seq_new:N \l__sos_list_seq
+\seq_new:N \l__sos_dependencies_seq
+\tl_new:N \l__sos_dependency_tl
+\msg_new:nnn {sos-contract}{bad-id}{Invalid~versioned~declaration~name~'#1'.}
+\msg_new:nnn {sos-contract}{duplicate}{Service~'#1'~has~already~been~generated.}
+\msg_new:nnn {sos-contract}{not-api}{Dependency~'#1'~must~name~an~already-generated~API.}
+\msg_new:nnn {sos-contract}{repeat}{Repeated~API~'#1'~in~one~declaration.}
+\msg_new:nnn {sos-contract}{empty}{Service~'#1'~requires~a~nonempty~API~set.}
+\msg_new:nnn {sos-contract}{unknown}{Service~'#1'~has~no~declaration.}
+\cs_new_protected:Npn \__sos_fresh:n #1
+  {
+    \regex_match:nnF { \A [A-Za-z0-9] [A-Za-z0-9._\x{2D}]* @ [1-9] [0-9]* \Z } {#1}
+      { \msg_fatal:nnn {sos-contract}{bad-id}{#1} }
+    \prop_if_in:NnT \g__sos_service_kind_prop {#1}
+      { \msg_fatal:nnn {sos-contract}{duplicate}{#1} }
+  }
+\cs_new_protected:Npn \__sos_dependency:n #1
+  {
+    \prop_get:NnNTF \g__sos_service_kind_prop {#1} \l_tmpa_tl
+      { \tl_if_eq:NnF \l_tmpa_tl {api} { \msg_fatal:nnn {sos-contract}{not-api}{#1} } }
+      { \msg_fatal:nnn {sos-contract}{not-api}{#1} }
+    \seq_if_in:NnT \l__sos_dependencies_seq {#1}
+      { \msg_fatal:nnn {sos-contract}{repeat}{#1} }
+    \seq_put_right:Nn \l__sos_dependencies_seq {#1}
+  }
+\NewDocumentCommand{\SosDeclareApi}{m}
+  {
+    \__sos_fresh:n {#1}
+    \prop_gput:Nnn \g__sos_service_kind_prop {#1}{api}
+    \prop_gput:Nnn \g__sos_service_uses_prop {#1}{}
+  }
+\cs_new_protected:Npn \__sos_composite:nnn #1#2#3
+  {
+    \__sos_fresh:n {#1}
+    \tl_if_blank:nT {#3} { \msg_fatal:nnn {sos-contract}{empty}{#1} }
+    \seq_clear:N \l__sos_dependencies_seq
+    \seq_set_split:Nnn \l__sos_list_seq {,} {#3}
+    \seq_map_inline:Nn \l__sos_list_seq
+      {
+        \tl_set:Nn \l__sos_dependency_tl {##1}
+        \tl_trim_spaces:N \l__sos_dependency_tl
+        \exp_args:NV \__sos_dependency:n \l__sos_dependency_tl
+      }
+    \prop_gput:Nnn \g__sos_service_kind_prop {#1}{#2}
+    \prop_gput:Nnx \g__sos_service_uses_prop {#1}{\seq_use:Nn \l__sos_dependencies_seq {,~}}
+  }
+\NewDocumentCommand{\SosDeclareData}{mm}{\__sos_composite:nnn {#1}{data}{#2}}
+\NewDocumentCommand{\SosDeclareAlgorithm}{mm}{\__sos_composite:nnn {#1}{algorithm}{#2}}
+\NewDocumentCommand{\SosServiceKind}{m}{\prop_get:NnNTF \g__sos_service_kind_prop {#1} \l_tmpa_tl {\textsf{\tl_use:N \l_tmpa_tl}}{\msg_fatal:nnn {sos-contract}{unknown}{#1}}}
+\NewDocumentCommand{\SosServiceUses}{m}{\prop_get:NnNTF \g__sos_service_uses_prop {#1} \l_tmpa_tl {\texttt{\tl_to_str:V \l_tmpa_tl}}{\msg_fatal:nnn {sos-contract}{unknown}{#1}}}
+\ExplSyntaxOff
+\ifdefined\SOSLoadContractRules
+  \expandafter\endinput
+\fi
+\usepackage[T1]{fontenc}
+\usepackage{lmodern,amsmath,amssymb,booktabs,array,fancyhdr,xcolor}
+\usepackage[a4paper,left=23mm,right=23mm,top=23mm,bottom=23mm,headheight=15pt]{geometry}
+\definecolor{accent}{HTML}{155B61}
+\definecolor{ink}{HTML}{192C37}
+\usepackage[unicode,colorlinks=true,linkcolor=accent]{hyperref}
+\hypersetup{pdftitle={Semantic Operating System: Kernel Contract},pdfsubject={Generation and execution of kernel services}}
+\setlength{\parindent}{0pt}\setlength{\parskip}{6pt}
+\setlength{\emergencystretch}{1.8em}\raggedbottom
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\sffamily\small Semantic Operating System}
+\fancyhead[R]{\sffamily\small Kernel contract}
+\fancyfoot[L]{\sffamily\footnotesize\hyperlink{home}{Contract}\quad\hyperlink{generation}{Generation}\quad\hyperlink{execution}{Execution}\quad\hyperlink{reader}{Reader binding}}
+\fancyfoot[R]{\sffamily\small\thepage}
+\renewcommand{\headrulewidth}{.3pt}
+\newcommand{\ktitle}[3]{\hypertarget{#1}{}\pdfbookmark[1]{#3}{bm-#1}%
+  {\sffamily\small\bfseries\color{accent}#2\par}%
+  {\sffamily\bfseries\fontsize{23}{26}\selectfont\color{ink}#3\par}\smallskip}
+\newcommand{\khead}[1]{\par\medskip{\sffamily\bfseries\color{accent}#1}\par\nobreak}
+\newcommand{\id}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\dom}{\operatorname{dom}}
+\SosDeclareApi{echo@1}
+\SosDeclareData{mirror@1}{echo@1}
+\begin{document}
+\color{ink}
+\ktitle{home}{Kernel extension \enspace/\enspace Service generation}{Kernel contract}
+Generate a versioned API first. A data-structure service can then use that API to construct or query a value. An algorithm service can use it, alone or with other generated APIs, to carry out a procedure. The kernel admits the declaration, resolves each call and checks which APIs the execution actually used.
+
+\khead{Authority and scope}
+The governing kernel is the 60-page \emph{Semantic Operating System Operational Manual}, \id{sos-v2.pdf}. Its record, namespace, registry and evaluator contracts retain their meanings. This document adds a catalog for service descriptors and a dispatch rule for invoking them. The PDF fixes the semantics. The accompanying Python modules execute the first service against the subset of those semantics that it needs.
+
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{.25\linewidth}>{\raggedright\arraybackslash}p{.67\linewidth}@{}}
+\toprule
+\textbf{Kernel operation} & \textbf{Obligation inherited by a service}\\\midrule
+Record and codec, pp.~2, 8 &
+A record carries an exact name, a declared profile, a shape and a body. Length-framed text preserves the order of fields, embedded separators and Unicode spelling.\\
+Name lookup, pp.~6, 9 &
+One occupied position corresponds to one registered name. Publishing a record and its name binding together keeps subsequent lookups coherent.\\
+Rank and evaluation, pp.~3--5, 10--11 &
+A numeric address has meaning in its specified namespace. Scalar values, solution sets and failed operations have distinct outcomes whenever a service exposes algebraic evaluation.\\
+Observer and completion, pp.~6--7, 12 &
+A view can discard detail. The status query uses the caller's Boolean and returns the name and $1-c$. The reading algorithm has a separate integer completion result.\\
+\bottomrule
+\end{tabular}
+
+\khead{Which object is being named?}
+A service ID selects versioned behavior. A record name selects stored data. A configuration address identifies a count vector within one namespace. For example, the service \id{algorithm.read@1} may read a claim named \id{c1} whose first term occurs twice. Dispatch uses the service ID, lookup uses the claim ID, and the ordered term slots preserve both occurrences.
+
+The exact kernel edition used here has SHA-256 digest\\
+{\small\ttfamily 5367120207c22eb7ff09d3dead871380497021c7392663568c272bbb059255bb}.
+
+\clearpage
+\ktitle{generation}{01 \enspace/\enspace Catalog}{Generate a service}
+Let $\Gamma$ be the current finite catalog. Its keys are exact versioned IDs. The public descriptor for key $s$ records its kind $k$ and its finite API-use set $U$. Installation also binds a callable $h$. Write $A(\Gamma)$ for the IDs already bound as APIs. Both rules assume a well-formed ID and a free registry position. The default Python catalog holds 256 services. A full catalog raises \id{RegistryFull}.
+
+\khead{Admission rules}
+\[
+\frac{s\notin\dom\Gamma\quad h:I\to O_e}
+ {\Gamma\;\longrightarrow\;\Gamma[s\mapsto(\mathsf{api},\varnothing,h)]}
+\qquad
+\frac{\begin{gathered}s\notin\dom\Gamma,\quad
+ k\in\{\mathsf{data},\mathsf{algorithm}\}\\
+ \varnothing\ne U\subseteq A(\Gamma),\quad h:(\mathit{call},I)\to O_e\end{gathered}}
+ {\Gamma\;\longrightarrow\;\Gamma[s\mapsto(k,U,h)]}.
+\]
+Here $I$ is the argument domain and $O_e=O\sqcup\mathsf{Error}$ admits a result or an error. Each handler checks its own data contract. The catalog checks names, kinds, existence of dependencies and callability. A singleton $U=\{a\}$ is sufficient. Larger sets contain distinct existing API versions. All dependencies resolve in the catalog \emph{before} the proposed insertion. Rejection leaves the earlier catalog in force.
+
+\textbf{API service.} Bind a callable to one fresh versioned ID and specify its inputs, output, allowed effects and failures. It is a primitive at this service boundary. Its implementation is responsible for honoring any kernel operation that it exposes.
+
+\textbf{Data-structure service.} Supply the representation, its construction or access operation, and the invariant on returned state. The service performs its declared API calls and returns the resulting structure or an error. The reader's constructor uses one API to create an initial reading state.
+
+\textbf{Algorithm service.} Supply the transition order, stopping rule and result. Depend on every API required by a successful run. The API set controls dispatch. The handler specifies order, repetition and data flow. In the reader, a loop can call one API many times.
+
+\khead{Names, versions and storage}
+The Python interface accepts an exact nonempty base and a final \id{@} followed by a positive ASCII decimal version without leading zeros. New versions have independent identities. A name in the TeX declaration syntax starts with an ASCII letter or digit. Subsequent characters before the version suffix may also include dots, underscores and hyphens. Service IDs on these pages fit both forms.
+
+The profile \id{sos.byte@1} uses one primitive $u$ with $u\star u=u$ and admissible counts $0,\ldots,255$. Each payload byte occupies its own cell and equals that cell's restricted rank. The extent is the byte length. A descriptor's record name is the service ID. Its payload frames the kind followed by the API IDs in sorted order. Generation binds the executable handler locally.
+
+\clearpage
+\ktitle{execution}{02 \enspace/\enspace Dispatch}{Execute through the kernel}
+To invoke a service, resolve its exact ID in $\Gamma$. An API receives its argument. A data-structure or algorithm handler receives its argument and a call function confined to that invocation. Initialize $H=\varnothing$, the set of successful API identifications witnessed in this invocation.
+
+\begin{enumerate}\setlength{\itemsep}{3pt}
+\item On $\mathit{call}(a,x)$ require that the call is active, $a\in U$ and $a$ resolves to the admitted API. Reject an unauthorized or unavailable dependency.
+\item Dispatch $x$ to that API. On success, add $a$ to $H$ and return its value to the calling handler. Multiple successful calls to the same API leave one member in $H$.
+\item A composite may return successfully only if $H=U$. An unused declared API signals a contract failure. Close the call function on exit so a saved reference cannot be used for a later invocation.
+\end{enumerate}
+Thus every successful composite execution has a witness for each declared API. A call outside $U$ raises \id{ForbiddenCall}, an unused dependency raises \id{IncompleteUse}, and a saved capability invoked after return raises \id{ExpiredCall}. Handlers run as trusted local Python code. The checks govern dispatch through the kernel. A handler with external effects supplies its own recovery rule. The reader keeps its state local until the whole request succeeds.
+
+\khead{A minimal construction}
+In the following complete Python example the data service returns a value produced by its one declared API. Run it with \id{sos-v2_services} on the module search path, for example from that directory.
+{\small\begin{verbatim}
+from kernel_services import Kernel
+
+k = Kernel()
+k.generate_api("echo@1", lambda value: value)
+k.generate_service("mirror@1", "data", {"echo@1"},
+                   lambda call, value: call("echo@1", value))
+assert k.run("mirror@1", "v") == "v"
+\end{verbatim}}
+The returned identifier from successful generation can be passed to later declarations. Both generated descriptors remain available by exact version. Substituting \id{echo@2} without generating it first fails admission. Returning the input directly from \id{mirror@1} leaves $H$ empty and fails its execution contract.
+
+\khead{Use the same contract in another TeX document}
+After \verb|\documentclass|, enable rules-only mode. A declaration is checked as TeX reads it. The following two declarations also run when this contract itself is typeset.
+{\small\begin{verbatim}
+\def\SOSLoadContractRules{1}
+\input{kernel-contract.tex}
+\SosDeclareApi{echo@1}
+\SosDeclareData{mirror@1}{echo@1}
+\end{verbatim}}
+For an algorithm use \verb|\SosDeclareAlgorithm{id}{api@1,other@1}| after declaring both APIs. Each ID is fresh. Each dependency list must contain distinct, previously declared APIs. TeX checks the service graph at publication time. The Python dispatcher checks its actual use during a run.
+
+\clearpage
+\ktitle{reader}{03 \enspace/\enspace First binding}{Bind the reading algorithm}
+The supplied \id{sos-v2_services/reading-algorithm.txt} defines a finite unread set. For each current claim it requires one relation with two, three or five context-specific term positions. The first service instantiates those positions from the caller's ordered terms. A claim ID binds the relation to its owner. Terms with equal spelling can occupy distinct slots.
+
+\khead{Generate in this order}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{.34\linewidth}>{\raggedright\arraybackslash}p{.58\linewidth}@{}}
+\toprule\textbf{Service ID} & \textbf{Contract on successful dispatch}\\\midrule
+\id{api.read.open@1} & Validate the complete claim batch and produce the initial unread state.\\
+\id{api.read.advance@1} & Test exhaustion. With unread input, form the next relation and advance the state by one claim.\\
+\id{api.read.report@1} & Require exhaustion and return the ordered relations and completion result.\\
+\id{data.read.state@1} & Data-structure service with singleton use set $\{\text{open}\}$. It constructs the same initial state through the generated open API.\\
+\id{algorithm.read@1} & Algorithm service with use set $\{\text{open},\text{advance},\text{report}\}$. The three short names here denote the exact API versions above.\\
+\bottomrule
+\end{tabular}
+
+\khead{One trace tests the distinction between declaration and execution}
+Start with one claim named \id{c1}, its exact text and two terms \id{lamp}, \id{switch}. The algorithm opens the batch, advances the claim, tests exhaustion through another advance, and reports a single ordered binary relation. In both this run and the empty run the successful API-use set is the same. For an empty input, the first advance observes exhaustion and report returns an empty relation list. The successful process exit code is $0$ in each case.
+
+For $m$ valid claims, each successful consuming step reduces $|U_{\rm unread}|$ by one. After $m$ such steps the exhausted check ends the loop. The generated relation for a claim with $n$ slots is the tuple $(t_1,\ldots,t_n)$ with $n\in\{2,3,5\}$. The record representation frames the claim text and terms in that order. Its byte-array extent can be larger than five. A four-term claim fails validation before the initial state is returned.
+
+\khead{Use the service}
+Run the following from the directory containing this contract. The argument names a UTF-8 JSON request. Omitting the argument reads the request from standard input.
+{\small\begin{verbatim}
+python sos-v2_services/reading_service.py claims.json
+\end{verbatim}}
+The companion \id{reader.pdf}, typeset from \id{reader.tex}, gives the request and response, all three arities, the error behavior and the correspondence with source labels \id{x00} through \id{x11}. The reader's TeX source imports these declaration rules. Its executable registrations are in \id{sos-v2_services/reading_service.py}.
+\end{document}
